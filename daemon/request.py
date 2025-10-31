@@ -78,7 +78,7 @@ class Request():
             return None, None
 
         return method, path, version
-             
+
     def prepare_headers(self, request):
         """Prepares the given HTTP headers."""
         lines = request.split('\r\n')

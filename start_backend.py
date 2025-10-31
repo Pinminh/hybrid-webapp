@@ -58,7 +58,7 @@ if __name__ == "__main__":
         default=PORT,
         help='Port number to bind the server. Default is {}.'.format(PORT)
     )
- 
+
     args = parser.parse_args()
     ip = args.server_ip
     port = args.server_port

@@ -67,15 +67,15 @@ def forward_request(host, port, request):
             response += chunk
         return response
     except socket.error as e:
-      print("Socket error: {}".format(e))
-      return (
-            "HTTP/1.1 404 Not Found\r\n"
-            "Content-Type: text/plain\r\n"
-            "Content-Length: 13\r\n"
-            "Connection: close\r\n"
-            "\r\n"
-            "404 Not Found"
-        ).encode('utf-8')
+        print("Socket error: {}".format(e))
+        return (
+                "HTTP/1.1 404 Not Found\r\n"
+                "Content-Type: text/plain\r\n"
+                "Content-Length: 13\r\n"
+                "Connection: close\r\n"
+                "\r\n"
+                "404 Not Found"
+            ).encode('utf-8')
 
 
 def resolve_routing_policy(hostname, routes):
@@ -90,15 +90,15 @@ def resolve_routing_policy(hostname, routes):
 
     print(hostname)
     proxy_map, policy = routes.get(hostname,('127.0.0.1:9000','round-robin'))
-    print proxy_map
-    print policy
+    print(proxy_map)
+    print(policy)
 
     proxy_host = ''
     proxy_port = '9000'
     if isinstance(proxy_map, list):
         if len(proxy_map) == 0:
             print("[Proxy] Emtpy resolved routing of hostname {}".format(hostname))
-            print "Empty proxy_map result"
+            print("Empty proxy_map result")
             # TODO: implement the error handling for non mapped host
             #       the policy is design by team, but it can be 
             #       basic default host in your self-defined system
@@ -178,7 +178,7 @@ def run_proxy(ip, port, routes):
     The process dinds the proxy server to the specified IP and port.
     In each incomping connection, it accepts the connections and
     spawns a new thread for each client using `handle_client`.
- 
+
 
     :params ip (str): IP address to bind the proxy server.
     :params port (int): port number to listen on.
@@ -200,7 +200,7 @@ def run_proxy(ip, port, routes):
             #        provided handle_client routine
             #
     except socket.error as e:
-      print("Socket error: {}".format(e))
+        print("Socket error: {}".format(e))
 
 def create_proxy(ip, port, routes):
     """

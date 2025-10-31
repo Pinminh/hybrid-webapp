@@ -91,7 +91,7 @@ def run_backend(ip, port, routes):
             #        provided handle_client routine
             #
     except socket.error as e:
-      print("Socket error: {}".format(e))
+        print("Socket error: {}".format(e))
 
 def create_backend(ip, port, routes={}):
     """
