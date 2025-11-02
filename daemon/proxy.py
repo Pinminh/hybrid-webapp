@@ -142,6 +142,7 @@ def handle_client(ip, port, conn, addr, routes):
     request = conn.recv(1024).decode()
 
     # Extract hostname
+    hostname = ''
     for line in request.splitlines():
         if line.lower().startswith('host:'):
             hostname = line.split(':', 1)[1].strip()
@@ -195,10 +196,13 @@ def run_proxy(ip, port, routes):
         while True:
             conn, addr = proxy.accept()
             #
-            #  TODO: implement the step of the client incomping connection
+            #  TODO: implement the step of the client incoming connection
             #        using multi-thread programming with the
             #        provided handle_client routine
-            #
+            #  DONE
+            client_thread = threading.Thread(target=handle_client, args=(ip, port, conn, addr, routes))
+            client_thread.daemon = True
+            client_thread.start()
     except socket.error as e:
         print("Socket error: {}".format(e))
 
