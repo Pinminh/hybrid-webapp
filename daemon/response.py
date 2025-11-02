@@ -50,12 +50,11 @@ class Response():
     :attrs request (PreparedRequest): the original request object.
 
     Usage::
-
-      >>> import Response
-      >>> resp = Response()
-      >>> resp.build_response(req)
-      >>> resp
-      <Response>
+        >>> import Response
+        >>> resp = Response()
+        >>> resp.build_response(req)
+        >>> resp
+        <Response>
     """
 
     __attrs__ = [
@@ -197,10 +196,13 @@ class Response():
         filepath = os.path.join(base_dir, path.lstrip('/'))
 
         print("[Response] serving the object at location {}".format(filepath))
-            #
-            #  TODO: implement the step of fetch the object file
-            #        store in the return value of content
-            #
+        #
+        #  TODO: implement the step of fetch the object file
+        #        store in the return value of content
+        #  DONE
+        with open(filepath, 'r', encoding='utf-8') as f:
+            content = f.read().encode('utf-8')
+        
         return len(content), content
 
 
@@ -216,7 +218,7 @@ class Response():
         reqhdr = request.headers
         rsphdr = self.headers
 
-        #Build dynamic headers
+        # Build dynamic headers
         headers = {
                 "Accept": "{}".format(reqhdr.get("Accept", "application/json")),
                 "Accept-Language": "{}".format(reqhdr.get("Accept-Language", "en-US,en;q=0.9")),
@@ -224,28 +226,31 @@ class Response():
                 "Cache-Control": "no-cache",
                 "Content-Type": "{}".format(self.headers['Content-Type']),
                 "Content-Length": "{}".format(len(self._content)),
-#                "Cookie": "{}".format(reqhdr.get("Cookie", "sessionid=xyz789")), #dummy cooki
+                # "Cookie": "{}".format(reqhdr.get("Cookie", "sessionid=xyz789")), #dummy cooki
         #
         # TODO prepare the request authentication
         #
-	# self.auth = ...
+        # self.auth = ...
                 "Date": "{}".format(datetime.datetime.utcnow().strftime("%a, %d %b %Y %H:%M:%S GMT")),
                 "Max-Forward": "10",
                 "Pragma": "no-cache",
                 "Proxy-Authorization": "Basic dXNlcjpwYXNz",  # example base64
                 "Warning": "199 Miscellaneous warning",
                 "User-Agent": "{}".format(reqhdr.get("User-Agent", "Chrome/123.0.0.0")),
-            }
+        }
 
         # Header text alignment
-            #
-            #  TODO: implement the header building to create formated
-            #        header from the provied headers
-            #
+        #
+        #  TODO: implement the header building to create formatted
+        #        header from the provided headers
+        #  DONE
+        lines = ['{}: {}'.format(k, v) for k, v in headers.items()]
+        fmt_header = '\r\n'.join(lines)
+        
         #
         # TODO prepare the request authentication
         #
-	# self.auth = ...
+        # self.auth = ...
         return str(fmt_header).encode('utf-8')
 
 
@@ -278,17 +283,91 @@ class Response():
         """
 
         path = request.path
+        if not path:
+            return self.build_notfound()
+        method = request.method
 
+        # ========== TASK 1A: Handle POST /login ==========
+        if path == "/login" and method == "POST":
+            # Parse form data from request body
+            params = request.body or {}            
+            username = params.get("username", "")
+            password = params.get("password", "")
+            
+            # Validate credentials
+            if username == "admin" and password == "password":
+                # LOGIN SUCCESS
+                print(f"[Response] '{username}' login SUCCESSFUL - Setting cookie")
+                base_dir = self.prepare_content_type("text/html")
+                _, content = self.build_content("/index.html", base_dir)
+                
+                response = (
+                    "HTTP/1.1 200 OK\r\n"
+                    "Content-Type: text/html; charset=utf-8\r\n"
+                    "Set-Cookie: auth=true; Path=/; HttpOnly\r\n"
+                    f"Content-Length: {len(content)}\r\n"
+                    "Connection: close\r\n"
+                    "\r\n"
+                ).encode("utf-8") + content
+                return response
+            else:
+                # LOGIN FAILED
+                print(f"[Response] '{username}' login FAILED - Invalid credentials")
+                base_dir = self.prepare_content_type("text/html")
+                _, content = self.build_content("/login.html", base_dir)
+                
+                response = (
+                    "HTTP/1.1 401 Unauthorized\r\n"
+                    "Content-Type: text/html; charset=utf-8\r\n"
+                    f"Content-Length: {len(content)}\r\n"
+                    "Connection: close\r\n"
+                    "\r\n"
+                ).encode("utf-8") + content
+                return response
+    
+        # ========== TASK 1B: Handle GET / or /index.html ==========
+        if path in ["/", "/index.html"] and method == "GET":
+            cookies = request.cookies or {}
+            
+            if cookies.get("auth") == "true":
+                # Valid cookie found
+                print("[Response] Valid auth cookie - Serving index.html")
+                base_dir = self.prepare_content_type("text/html")
+                _, content = self.build_content("/index.html", base_dir)
+                
+                response = (
+                    "HTTP/1.1 200 OK\r\n"
+                    "Content-Type: text/html; charset=utf-8\r\n"
+                    f"Content-Length: {len(content)}\r\n"
+                    "Connection: close\r\n"
+                    "\r\n"
+                ).encode("utf-8") + content
+                return response
+            else:
+                # No valid cookie
+                print("[Response] No auth cookie - Returning 401")
+                base_dir = self.prepare_content_type("text/html")
+                _, content = self.build_content("/login.html", base_dir)
+                
+                response = (
+                    "HTTP/1.1 401 Unauthorized\r\n"
+                    "Content-Type: text/html; charset=utf-8\r\n"
+                    f"Content-Length: {len(content)}\r\n"
+                    "Connection: close\r\n"
+                    "\r\n"
+                ).encode("utf-8") + content
+                return response
+        
         mime_type = self.get_mime_type(path)
         print("[Response] {} path {} mime_type {}".format(request.method, request.path, mime_type))
 
         base_dir = ""
 
-        #If HTML, parse and serve embedded objects
+        # If HTML, parse and serve embedded objects
         if path.endswith('.html') or mime_type == 'text/html':
-            base_dir = self.prepare_content_type(mime_type = 'text/html')
+            base_dir = self.prepare_content_type(mime_type='text/html')
         elif mime_type == 'text/css':
-            base_dir = self.prepare_content_type(mime_type = 'text/css')
+            base_dir = self.prepare_content_type(mime_type='text/css')
         #
         # TODO: add support objects
         #
