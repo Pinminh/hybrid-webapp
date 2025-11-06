@@ -1,0 +1,273 @@
+<!DOCTYPE html>
+<html lang="vi">
+<head>
+  <meta charset="UTF-8">
+  <title>P2P Chat Dashboard</title>
+  <style>
+    body {
+      margin: 0;
+      font-family: "Segoe UI", sans-serif;
+      background: linear-gradient(135deg, #d8eefe, #ffffff);
+      color: #003366;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      height: 100vh;
+    }
+    h1 {
+      margin-top: 20px;
+      color: #0a4da3;
+    }
+    .container {
+      width: 90%;
+      max-width: 1000px;
+      background: #ffffffb0;
+      border-radius: 20px;
+      box-shadow: 0 4px 10px rgba(0,0,0,0.15);
+      display: grid;
+      grid-template-columns: 1fr 2fr;
+      gap: 20px;
+      padding: 20px;
+      height: 75vh;
+    }
+
+    /* Left panel */
+    .left {
+      display: flex;
+      flex-direction: column;
+      justify-content: space-between;
+    }
+    .card {
+      background: #f4f9ff;
+      border: 2px solid #cfe3ff;
+      border-radius: 15px;
+      padding: 15px;
+      margin-bottom: 15px;
+    }
+    .card h3 {
+      margin: 0 0 10px;
+      color: #0a4da3;
+      font-size: 18px;
+    }
+    input, button {
+      padding: 8px 10px;
+      border-radius: 8px;
+      border: 1px solid #a9c8ff;
+      outline: none;
+      font-size: 14px;
+    }
+    input:focus {
+      border-color: #0a4da3;
+    }
+    button {
+      background: #0a4da3;
+      color: white;
+      cursor: pointer;
+      transition: 0.2s;
+    }
+    button:hover {
+      background: #0d63d6;
+    }
+
+    /* Peer list */
+    table {
+      width: 100%;
+      border-collapse: collapse;
+    }
+    th, td {
+      padding: 6px 8px;
+      text-align: left;
+    }
+    th {
+      background: #cfe3ff;
+    }
+    tr:nth-child(even) {
+      background: #f0f7ff;
+    }
+
+    /* Chat area */
+    .chat {
+      display: flex;
+      flex-direction: column;
+      height: 100%;
+    }
+    .chat-header {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      background: #0a4da3;
+      color: white;
+      border-radius: 10px;
+      padding: 10px 15px;
+    }
+    .chat-box {
+      flex: 1;
+      background: #f9fbff;
+      border: 2px solid #cfe3ff;
+      border-radius: 10px;
+      margin-top: 10px;
+      padding: 10px;
+      overflow-y: auto;
+    }
+    .msg {
+      margin: 4px 0;
+      padding: 6px 10px;
+      border-radius: 10px;
+      max-width: 70%;
+    }
+    .me {
+      background: #d8eefe;
+      align-self: flex-end;
+    }
+    .other {
+      background: #e8f0ff;
+      align-self: flex-start;
+    }
+    .chat-input {
+      display: flex;
+      margin-top: 10px;
+      gap: 8px;
+    }
+    #msg-input {
+      flex: 1;
+    }
+  </style>
+</head>
+<body>
+
+  <h1>🌐 P2P Chat Dashboard</h1>
+  <div class="container">
+    <!-- LEFT PANEL -->
+    <div class="left">
+      <div class="card">
+        <h3>Đăng ký Peer</h3>
+        <input id="ip" placeholder="Nhập IP (vd: 127.0.0.1)" />
+        <input id="port" placeholder="Nhập Port (vd: 8080)" />
+        <button id="submit">Submit Info</button>
+        <div id="status" style="margin-top:10px; color:green;"></div>
+      </div>
+
+      <div class="card">
+        <h3>Danh sách Peers</h3>
+        <button id="refresh">🔄 Cập nhật danh sách</button>
+        <div id="peer-table" style="margin-top:10px; max-height:200px; overflow-y:auto;"></div>
+      </div>
+    </div>
+
+    <!-- RIGHT PANEL (CHAT) -->
+    <div class="chat">
+      <div class="chat-header">
+        <h2 id="chat-title">💬 Khu vực Chat</h2>
+        <button id="toggle-broadcast">🌐 Broadcast</button>
+      </div>
+      <div id="messages" class="chat-box"></div>
+      <div class="chat-input">
+        <input id="msg-input" placeholder="Nhập tin nhắn..." />
+        <button id="send">Gửi</button>
+      </div>
+    </div>
+  </div>
+
+  <script>
+    let currentPeer = null;
+    let broadcastMode = false;
+
+    // Submit peer info
+    document.getElementById('submit').onclick = async () => {
+      const ip = document.getElementById('ip').value.trim();
+      const port = document.getElementById('port').value.trim();
+      if (!ip || !port) return alert("Vui lòng nhập IP và Port!");
+
+      const res = await fetch('/submit-info', {
+        method: 'POST',
+        headers: {'Content-Type': 'application/x-www-form-urlencoded'},
+        body: new URLSearchParams({ ip, port })
+      });
+      const text = await res.text();
+      document.getElementById('status').innerText = text || '✅ Đăng ký thành công!';
+    };
+
+    document.getElementById('refresh').onclick = async () => {
+  const res = await fetch('/get-list');
+  const text = await res.text();
+
+  if (text.includes("No peers")) {
+    document.getElementById('peer-table').innerHTML = "<i>Không có peer nào đăng ký.</i>";
+    return;
+  }
+
+  const peers = text.split('\n').filter(Boolean);
+  let html = '<table><tr><th>IP</th><th>Port</th><th></th></tr>';
+  peers.forEach(p => {
+    const [ip, port] = p.split(':');
+    html += `
+      <tr>
+        <td>${ip}</td><td>${port}</td>
+        <td><button class="connect-btn" data-ip="${ip}" data-port="${port}">Kết nối</button></td>
+      </tr>`;
+  });
+  html += '</table>';
+  document.getElementById('peer-table').innerHTML = html;
+
+  document.querySelectorAll('.connect-btn').forEach(btn => {
+    btn.onclick = async () => {
+      const ip = btn.dataset.ip, port = btn.dataset.port;
+      await connectToPeer(ip, port);
+    };
+  });
+};
+
+
+
+    async function connectToPeer(ip, port) {
+      await fetch('/connect-peer', {
+        method: 'POST',
+        headers: {'Content-Type': 'application/json'},
+        body: JSON.stringify({ ip, port })
+      });
+      document.getElementById('messages').innerHTML =
+        `<div style="color:gray">🔗 Đã kết nối với peer ${ip}:${port}</div>`;
+      currentPeer = { ip, port };
+      broadcastMode = false;
+      document.getElementById('chat-title').innerText = `💬 Chat với ${ip}:${port}`;
+    }
+
+    document.getElementById('toggle-broadcast').onclick = () => {
+      broadcastMode = !broadcastMode;
+      currentPeer = null;
+      document.getElementById('chat-title').innerText = broadcastMode
+        ? "📡 Broadcast Mode (Gửi cho tất cả)"
+        : "💬 Khu vực Chat";
+    };
+
+    document.getElementById('send').onclick = async () => {
+      const msg = document.getElementById('msg-input').value.trim();
+      if (!msg) return;
+      const messages = document.getElementById('messages');
+      messages.innerHTML += `<div class="msg me"><b>Tôi:</b> ${msg}</div>`;
+      messages.scrollTop = messages.scrollHeight;
+      document.getElementById('msg-input').value = '';
+
+      if (broadcastMode) {
+        await fetch('/broadcast-peer', {
+          method: 'POST',
+          headers: {'Content-Type': 'application/json'},
+          body: JSON.stringify({ message: msg })
+        });
+      } else if (currentPeer) {
+        await fetch('/send-peer', {
+          method: 'POST',
+          headers: {'Content-Type': 'application/json'},
+          body: JSON.stringify({
+            ip: currentPeer.ip,
+            port: currentPeer.port,
+            message: msg
+          })
+        });
+      } else {
+        alert("Chưa chọn peer hoặc chế độ broadcast!");
+      }
+    };
+  </script>
+</body>
+</html>
