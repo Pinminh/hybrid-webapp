@@ -177,7 +177,6 @@
       const ip = document.getElementById('ip').value.trim();
       const port = document.getElementById('port').value.trim();
       if (!ip || !port) return alert("Vui lòng nhập IP và Port!");
-
       const res = await fetch('/submit-info', {
         method: 'POST',
         headers: {'Content-Type': 'application/x-www-form-urlencoded'},
@@ -217,13 +216,11 @@
   });
 };
 
-
-
     async function connectToPeer(ip, port) {
       await fetch('/connect-peer', {
         method: 'POST',
         headers: {'Content-Type': 'application/json'},
-        body: JSON.stringify({ ip, port })
+        body: new URLSearchParams({ ip, port })
       });
       document.getElementById('messages').innerHTML =
         `<div style="color:gray">🔗 Đã kết nối với peer ${ip}:${port}</div>`;
