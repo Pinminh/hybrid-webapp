@@ -1,14 +1,3 @@
-#
-# Copyright (C) 2025 pdnguyen of HCMC University of Technology VNU-HCM.
-# All rights reserved.
-# This file is part of the CO3093/CO3094 course.
-#
-# WeApRous release
-#
-# The authors hereby grant to Licensee personal permission to use
-# and modify the Licensed Source Code for the sole purpose of studying
-# while attending the course
-#
 
 """
 daemon.response
@@ -20,42 +9,15 @@ based on incoming requests.
 
 The current version supports MIME type detection, content loading and header formatting
 """
+import json
 import datetime
 import os
 import mimetypes
 from .dictionary import CaseInsensitiveDict
-
+from db import peer_list, active_peers
 BASE_DIR = ""
 
 class Response():   
-    """The :class:`Response <Response>` object, which contains a
-    server's response to an HTTP request.
-
-    Instances are generated from a :class:`Request <Request>` object, and
-    should not be instantiated manually; doing so may produce undesirable
-    effects.
-
-    :class:`Response <Response>` object encapsulates headers, content, 
-    status code, cookies, and metadata related to the request-response cycle.
-    It is used to construct and serve HTTP responses in a custom web server.
-
-    :attrs status_code (int): HTTP status code (e.g., 200, 404).
-    :attrs headers (dict): dictionary of response headers.
-    :attrs url (str): url of the response.
-    :attrsencoding (str): encoding used for decoding response content.
-    :attrs history (list): list of previous Response objects (for redirects).
-    :attrs reason (str): textual reason for the status code (e.g., "OK", "Not Found").
-    :attrs cookies (CaseInsensitiveDict): response cookies.
-    :attrs elapsed (datetime.timedelta): time taken to complete the request.
-    :attrs request (PreparedRequest): the original request object.
-
-    Usage::
-        >>> import Response
-        >>> resp = Response()
-        >>> resp.build_response(req)
-        >>> resp
-        <Response>
-    """
 
     __attrs__ = [
         "_content",
@@ -119,14 +81,7 @@ class Response():
 
 
     def get_mime_type(self, path):
-        """
-        Determines the MIME type of a file based on its path.
-
-        "params path (str): Path to the file.
-
-        :rtype str: MIME type string (e.g., 'text/html', 'image/png').
-        """
-
+        
         try:
             mime_type, _ = mimetypes.guess_type(path)
         except Exception:
@@ -135,51 +90,36 @@ class Response():
 
 
     def prepare_content_type(self, mime_type='text/html'):
-        """
-        Prepares the Content-Type header and determines the base directory
-        for serving the file based on its MIME type.
-
-        :params mime_type (str): MIME type of the requested resource.
-
-        :rtype str: Base directory path for locating the resource.
-
-        :raises ValueError: If the MIME type is unsupported.
-        """
-        
         base_dir = ""
-
-        # Processing mime_type based on main_type and sub_type
         main_type, sub_type = mime_type.split('/', 1)
-        print("[Response] processing MIME main_type={} sub_type={}".format(main_type,sub_type))
+        self.headers['Content-Type'] = mime_type
+        #print("[Response] processing MIME main_type={} sub_type={}".format(main_type,sub_type))
         if main_type == 'text':
-            self.headers['Content-Type']='text/{}'.format(sub_type)
             if sub_type == 'plain' or sub_type == 'css':
                 base_dir = BASE_DIR+"static/"
             elif sub_type == 'html':
                 base_dir = BASE_DIR+"www/"
             else:
-                handle_text_other(sub_type)
+                raise ValueError("Invalid MEME type: main_type={} sub_type={}".format(main_type,sub_type))
         elif main_type == 'image':
-            base_dir = BASE_DIR+"static/"
-            self.headers['Content-Type']='image/{}'.format(sub_type)
+            if sub_type in ['png', 'jpeg', 'vnd.microsoft.icon', 'x-icon']:
+                base_dir = BASE_DIR+"static/images/"
+            else:
+                raise ValueError(f"Unsupported image subtype: {sub_type}")
         elif main_type == 'application':
-            base_dir = BASE_DIR+"apps/"
-            self.headers['Content-Type']='application/{}'.format(sub_type)
-        #
-        #  TODO: process other mime_type
-        #        application/xml       
-        #        application/zip
-        #        ...
-        #        text/csv
-        #        text/xml
-        #        ...
-        #        video/mp4 
-        #        video/mpeg
-        #        ...
-        #
-        else:
-            raise ValueError("Invalid MEME type: main_type={} sub_type={}".format(main_type,sub_type))
-
+            if sub_type == 'x-x509-ca-cert':
+                base_dir = BASE_DIR+"cert/"
+            elif sub_type == 'javascript':
+                base_dir = BASE_DIR+"static/js/"
+            elif sub_type == 'python':
+                base_dir = BASE_DIR+"apps/"
+            else:
+                raise ValueError(f"Unsupported application subtype: {sub_type}")
+        elif main_type == 'video':
+            if sub_type == 'mp4':
+                base_dir = BASE_DIR + ""
+            raise ValueError(f"Unsupported video subtype: {sub_type}")
+        else: raise ValueError(f"Unsupported main MIME type: {main_type}")
         return base_dir
 
 
@@ -196,14 +136,20 @@ class Response():
         filepath = os.path.join(base_dir, path.lstrip('/'))
 
         print("[Response] serving the object at location {}".format(filepath))
-        #
-        #  TODO: implement the step of fetch the object file
-        #        store in the return value of content
-        #  DONE
-        with open(filepath, 'r', encoding='utf-8') as f:
-            content = f.read().encode('utf-8')
-        
-        return len(content), content
+        # hiện thực lấy dữ liệu trả về (len(content) và content)
+        try:
+            with open(filepath, 'r', encoding='utf-8') as f:
+                content = f.read().encode('utf-8')
+            return (len(content), content)
+        except FileNotFoundError:
+            print("[Response] File not found: {}".format(filepath))
+            self.status_code = 404
+            return (len(b"404"),b"404")
+        except Exception as e:
+            print("[Response] Server error {}: {}".format(filepath, e))
+            self.status_code = 500
+            return (len(b"500"),b"500")
+
 
 
     def build_response_header(self, request):
@@ -281,7 +227,7 @@ class Response():
 
         :rtype bytes: complete HTTP response using prepared headers and content.
         """
-
+        print(f"TAOLAAI:::{request.body}")
         path = request.path
         if not path:
             return self.build_notfound()
@@ -299,7 +245,8 @@ class Response():
                 # LOGIN SUCCESS
                 print(f"[Response] '{username}' login SUCCESSFUL - Setting cookie")
                 base_dir = self.prepare_content_type("text/html")
-                _, content = self.build_content("/index.html", base_dir)
+                # chuyển hướng
+                _, content = self.build_content("/dashboard.html", base_dir)
                 
                 response = (
                     "HTTP/1.1 200 OK\r\n"
@@ -331,9 +278,9 @@ class Response():
             
             if cookies.get("auth") == "true":
                 # Valid cookie found
-                print("[Response] Valid auth cookie - Serving index.html")
+                print("[Response] Valid auth cookie - Serving dashboard.html")
                 base_dir = self.prepare_content_type("text/html")
-                _, content = self.build_content("/index.html", base_dir)
+                _, content = self.build_content("/dashboard.html", base_dir)
                 
                 response = (
                     "HTTP/1.1 200 OK\r\n"
@@ -357,9 +304,83 @@ class Response():
                     "\r\n"
                 ).encode("utf-8") + content
                 return response
-        
+        # ======= START TASK 2 ======= #
+        # ========== Handle POST /submit-info ==========
+        if path == "/submit-info" and method == "POST":
+            params = request.body or {}
+            ip = params.get("ip", "127.0.0.1")
+            port = params.get("port", "9001")
+
+            print(f"[Submit] Peer info received: {ip}:{port}")
+            if (ip, port) not in peer_list:
+                peer_list.append((ip, port))
+                print(f"[SubmitInfo] New peer registered: {ip}:{port}")
+            else:
+                print(f"[SubmitInfo] Peer already registered: {ip}:{port}")
+            response_body = f"Received peer info: {ip}:{port}".encode("utf-8")
+
+            response = (
+                "HTTP/1.1 200 OK\r\n"
+                "Content-Type: text/plain; charset=utf-8\r\n"
+                f"Content-Length: {len(response_body)}\r\n"
+                "Connection: close\r\n"
+                "\r\n"
+            ).encode("utf-8") + response_body
+            return response
+        if path == "/get-list" and method == "GET":
+            if not peer_list:
+                content = "No peers registered.".encode("utf-8")
+            else:
+                content = "\n".join([f"{ip}:{port}" for ip, port in peer_list]).encode("utf-8")
+
+            response = (
+                "HTTP/1.1 200 OK\r\n"
+                "Content-Type: text/plain\r\n"
+                f"Content-Length: {len(content)}\r\n"
+                "Connection: close\r\n"
+                "\r\n"
+            ).encode("utf-8") + content
+
+            return response
+        ## kết nối đến peer / direct peer communicate
+        if path == "/connect-peer" and method == "POST":
+            params = request.body or {}
+
+            # Trường hợp request.body là string kiểu JSON hoặc form data
+
+            ip = params.get("ip", "")
+            port = params.get("port", "")
+
+            if not ip or not port:
+                msg = "Missing 'ip' or 'port' field".encode("utf-8")
+                response = (
+                    "HTTP/1.1 400 Bad Request\r\n"
+                    "Content-Type: text/plain; charset=utf-8\r\n"
+                    f"Content-Length: {len(msg)}\r\n"
+                    "Connection: close\r\n"
+                    "\r\n"
+                ).encode("utf-8") + msg
+                return response
+
+            print(f"[ConnectPeer] Connecting to peer {ip}:{port}")
+
+            # Lưu trạng thái kết nối (tùy ý)
+            
+
+            # Sau này có thể thêm logic gửi HTTP request tới peer kia ở đây
+            response_body = f"Đã kết nối tới peer {ip}:{port}".encode("utf-8")
+
+            response = (
+                "HTTP/1.1 200 OK\r\n"
+                "Content-Type: text/plain; charset=utf-8\r\n"
+                f"Content-Length: {len(response_body)}\r\n"
+                "Connection: close\r\n"
+                "\r\n"
+            ).encode("utf-8") + response_body
+            return response
         mime_type = self.get_mime_type(path)
         print("[Response] {} path {} mime_type {}".format(request.method, request.path, mime_type))
+
 
         base_dir = ""
 

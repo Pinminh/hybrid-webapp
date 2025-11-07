@@ -1,14 +1,4 @@
-#
-# Copyright (C) 2025 pdnguyen of HCMC University of Technology VNU-HCM.
-# All rights reserved.
-# This file is part of the CO3093/CO3094 course.
-#
-# WeApRous release
-#
-# The authors hereby grant to Licensee personal permission to use
-# and modify the Licensed Source Code for the sole purpose of studying
-# while attending the course
-#
+
 
 """
 daemon.request
@@ -93,6 +83,7 @@ class Request():
         """Prepares the entire request with the given parameters."""
 
         # Prepare the request line from the request header
+        print(f"{request}")
         self.method, self.path, self.version = self.extract_request_line(request)
         print("[Request] {} path {} version {}".format(self.method, self.path, self.version))
 
@@ -106,17 +97,9 @@ class Request():
         if not routes == {}:
             self.routes = routes
             self.hook = routes.get((self.method, self.path))
-            #
-            # self.hook manipulation goes here
-            # ...
-            #
 
         self.headers = self.prepare_headers(request)
         cookies = self.headers.get('Cookie', '')
-        #
-        #  TODO: implement the cookie function here
-        #        by parsing the header            #
-        #  DONE
         for item in cookies.split('; '):
             if '=' in item:
                 key, value = item.split('=', 1)
@@ -125,7 +108,7 @@ class Request():
                 self.cookies[key] = value
 
         # Body (bytes) — sliced by Content-Length if present
-        head, body_bytes = self.split_head_body(request)
+        _, body_bytes = self.split_head_body(request)
         try:
             cl = int(self.headers.get('Content-Length', '0') or 0)
         except Exception:
@@ -160,6 +143,9 @@ class Request():
         # TODO prepare the request authentication
         #
         # self.auth = ...
+        if self.headers is None:
+            self.headers = {}
+        self.headers["Content-Length"] = str(len(body) if body else 0)
         return
 
 
