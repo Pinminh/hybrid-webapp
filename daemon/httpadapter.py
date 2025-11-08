@@ -116,8 +116,6 @@ class HttpAdapter:
 
         # Build response
         response = resp.build_response(req)
-
-        #print(response)
         conn.sendall(response)
         conn.close()
 
