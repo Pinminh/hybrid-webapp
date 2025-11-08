@@ -108,7 +108,7 @@ class HttpAdapter:
         req.prepare(msg, routes)
         # Handle request hook
         if req.hook:
-            print("[HttpAdapter] hook in route-path METHOD {} PATH {}".format(req.hook._route_path,req.hook._route_methods))
+           # print("[HttpAdapter] hook in route-path METHOD {} PATH {}".format(req.hook._route_path,req.hook._route_methods))
             req.hook(headers = "bksysnet",body = "get in touch")
             #
             # TODO: handle for App hook here

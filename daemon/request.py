@@ -85,7 +85,7 @@ class Request():
         # Prepare the request line from the request header
         #print(f"{request}")
         self.method, self.path, self.version = self.extract_request_line(request)
-        print("[Request] {} path {} version {}".format(self.method, self.path, self.version))
+        #print("[Request] {} path {} version {}".format(self.method, self.path, self.version))
 
         #
         # @bksysnet Preapring the webapp hook with WeApRous instance

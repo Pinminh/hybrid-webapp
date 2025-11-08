@@ -15,13 +15,19 @@ import os
 import mimetypes
 import socket
 from .dictionary import CaseInsensitiveDict
-from db import peer_list, history_chat
+from db import peer_list, history_chat,connections
 from urllib.parse import unquote_plus
 #from db import *
 BASE_DIR = ""
 import threading
 peer_sockets = {}  # Lưu socket listener của từng peer
-connected_peers = {}  # { "ip:port" : ["ip2:port2", ...] }
+# hàm để thêm các mối kết nối vô
+def add_connection(ip1, port1, ip2, port2):
+    a = f"{ip1}:{port1}"
+    b = f"{ip2}:{port2}"
+    connections.setdefault(a, set()).add(b)
+    connections.setdefault(b, set()).add(a)
+
 
 def handle_peer_message(conn, addr, my_ip, my_port):
     try:
@@ -46,7 +52,6 @@ def handle_peer_message(conn, addr, my_ip, my_port):
 
         elif data == "CONFIRM_CONNECT":
             print(f"✅ Kết nối được xác nhận từ {addr}")
-
         elif data.startswith("CHAT_MESSAGE"):
             parts = data.split("|")
             if len(parts) >= 4:
@@ -319,7 +324,6 @@ class Response():
 
         :rtype bytes: complete HTTP response using prepared headers and content.
         """
-        #print(f"TAOLAAI:::{request.body}")
         path = request.path
         if not path:
             return self.build_notfound()
@@ -400,7 +404,6 @@ class Response():
         # ========== Handle POST /submit-info ==========
         elif path == "/submit-info" and method == "POST":
             params = request.body or {}
-            print(params)
             ip = params.get("ip", "127.0.0.1")
             port = params.get("port", "9001")
 
@@ -409,9 +412,12 @@ class Response():
                 peer_list.append((ip, port))
                 print(f"[SubmitInfo] New peer registered: {ip}:{port}")
                 # mở luồng nghe request từ peer khác
-                t = threading.Thread(target=start_peer_listener, args=(ip, port), daemon=True)
-                t.start()
-                peer_sockets[(ip, port)] = t
+                if f"{ip}:{port}" in connections:
+                    print(f"[SubmitInfo] Re-Login for peer {ip}:{port}")
+                else:
+                    t = threading.Thread(target=start_peer_listener, args=(ip, port), daemon=True)
+                    t.start()
+                    peer_sockets[(ip, port)] = t
             else:
                 print(f"[SubmitInfo] Peer already registered: {ip}:{port}")
             response_body = f"Received peer info: {ip}:{port}".encode("utf-8")
@@ -424,7 +430,37 @@ class Response():
                 "\r\n"
             ).encode("utf-8") + response_body
             return response
-        elif path == "/get-list" and method == "GET":
+        elif path == "/add-list" and method == "POST":
+            params = request.body or {}
+            src_ip = params.get("source_ip")
+            src_port = params.get("source_port")
+            target_ip = params.get("target_ip", "")
+            target_port = params.get("target_port","")
+            if not all([src_ip, src_port, target_ip, target_port]):
+                msg = "Missing ip or port field".encode("utf-8")
+                return (
+                    "HTTP/1.1 400 Bad Request\r\n"
+                    "Content-Type: text/plain\r\n"
+                    f"Content-Length: {len(msg)}\r\n"
+                    "Connection: close\r\n\r\n"
+                ).encode("utf-8") + msg
+            try:
+                add_connection(src_ip,src_port,target_ip,target_port)
+
+                msg = f"Đã thêm peer vào danh sách kết nối".encode("utf-8")
+                response = (
+                    "HTTP/1.1 200 OK\r\n"
+                    "Content-Type: text/plain\r\n"
+                    f"Content-Length: {len(msg)}\r\n"
+                    "Connection: close\r\n\r\n"
+                ).encode("utf-8") + msg
+                return response
+
+            except Exception as e:
+                err = f"Lỗi khi kết nối tới {target_ip}:{target_port} → {e}".encode("utf-8")
+                print(err)
+                return self.build_notfound()
+        elif path == "/get-total-peer" and method == "GET":
             if not peer_list:
                 content = "No peers registered.".encode("utf-8")
             else:
@@ -438,6 +474,29 @@ class Response():
                 "\r\n"
             ).encode("utf-8") + content
 
+            return response
+        elif path == "/get-list" and method == "POST":
+            params = request.body or {}
+            ip = params.get("ip")
+            port = params.get("port")
+            if not ip or not port:
+                msg = "Missing ip or port field".encode("utf-8")
+                return (
+                    "HTTP/1.1 400 Bad Request\r\n"
+                    "Content-Type: text/plain\r\n"
+                    f"Content-Length: {len(msg)}\r\n"
+                    "Connection: close\r\n\r\n"
+                ).encode("utf-8") + msg
+            
+            content = "\n".join([f"{connect_peer}" for connect_peer in connections.get(f"{ip}:{port}",set())]).encode("utf-8")
+            
+            response = (
+                "HTTP/1.1 200 OK\r\n"
+                "Content-Type: text/plain\r\n"
+                f"Content-Length: {len(content)}\r\n"
+                "Connection: close\r\n"
+                "\r\n"
+            ).encode("utf-8") + content
             return response
         ## kết nối đến peer / direct peer communicate
         elif path == "/connect-peer" and method == "POST":
@@ -478,6 +537,28 @@ class Response():
                 err = f"Lỗi khi kết nối tới {target_ip}:{target_port} → {e}".encode("utf-8")
                 print(err)
                 return self.build_notfound()
+        elif path == "/broadcast-peer" and method == "POST":
+            params = request.body or {}
+            ip = params.get("ip")
+            port = params.get("port")
+            message = unquote_plus(params.get("message"))
+
+            if not all([ip,port, message]):
+                msg = "Missing required fields".encode("utf-8")
+                return (
+                    "HTTP/1.1 400 Bad Request\r\n"
+                    "Content-Type: text/plain\r\n"
+                    f"Content-Length: {len(msg)}\r\nConnection: close\r\n\r\n"
+                ).encode("utf-8") + msg
+            connected_set = connections.get(f"{ip}:{port}", set())
+            for target in connected_set:
+                target_ip, target_port = target.split(":")
+                send_to_peer_message(ip, port, target_ip, target_port, message)
+            body = f"Sent from {ip}:{port}".encode("utf-8")
+            return (
+                "HTTP/1.1 200 OK\r\nContent-Type: text/plain\r\n"
+                f"Content-Length: {len(body)}\r\nConnection: close\r\n\r\n"
+            ).encode("utf-8") + body
         elif path == "/send-peer" and method == "POST":
             params = request.body or {}
             src_ip = params.get("source_ip")
@@ -519,7 +600,6 @@ class Response():
             chat = history_chat.get(key, [])
 
             lines = []
-            print(f"CHAT NE:{chat}")
             local_id = f"{src_ip}:{int(src_port)}"
             peer_id = f"{target_ip}:{int(target_port)}"
             for msg_dict in chat:
@@ -528,7 +608,6 @@ class Response():
                         lines.append(f"{sender}|{msg}")
             
             resp_body = "\n".join(lines).encode("utf-8")
-            print(f"GỬI ĐẾN HTML :{lines}")
             response = (
                 "HTTP/1.1 200 OK\r\n"
                 "Content-Type: text/plain; charset=utf-8\r\n"
@@ -536,7 +615,24 @@ class Response():
                 "Connection: close\r\n\r\n"
             ).encode("utf-8") + resp_body
             return response
-
+        elif path== "/remove-peer":
+            params = request.body or {}
+            ip = params.get("ip","")
+            port = params.get("port","")
+            # để xóa peer_list
+            peer = (ip,port)
+            # ko cần xóa khỏi connections
+            if peer in peer_list:
+                peer_list.remove(peer)
+            resp_body = "1 peer đã thoát".encode("utf-8")
+            print("Cập nhật lại danh sách peer hoạt động")
+            response = (
+                "HTTP/1.1 200 OK\r\n"
+                "Content-Type: text/plain; charset=utf-8\r\n"
+                f"Content-Length: {len(resp_body)}\r\n"
+                "Connection: close\r\n\r\n"
+            ).encode("utf-8") + resp_body
+            return response
         mime_type = self.get_mime_type(path)
         print("[Response] {} path {} mime_type {}".format(request.method, request.path, mime_type))
 
