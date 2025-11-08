@@ -62,40 +62,31 @@ def hello(headers, body):
     print("[SampleApp] ['PUT'] Hello in {} to {}".format(headers, body))
 
 
-
+# đăng kí ip và port đến server trung tâm
 @app.route("/submit-info", methods=["POST"])
 def submit_info(headers=None, body=None):
 
     print(f"[Submit] Received peer info: ")
 
 
-peer_list = []  # simple in-memory tracker
-
+# thêm 1 peer trong danh sách peer vào danh sách peer-connected với peer hiện tại
 @app.route("/add-list", methods=["POST"])
 def add_list(headers=None, body=None):
     """
     Add a peer to active list
     Example body: ip=127.0.0.1&port=9002
     """
-    params = dict(pair.split("=", 1) for pair in body.split("&") if "=" in pair)
-    ip = params.get("ip", "")
-    port = params.get("port", "")
-    if ip and port:
-        peer_list.append((ip, port))
-        print(f"[SampleApp] Peer added to list: {ip}:{port}")
-    else:
-        print("[SampleApp] Failed to added peer to list")
+    print("[SampleApp] add-List")
 
-
-@app.route("/get-list", methods=["GET"])
+# Lấy danh sách những peer đã kết nối với peer hiện tại, chọn POST do cần đính kém vài thông tin
+@app.route("/get-list", methods=["POST"])
 def get_list(headers=None, body=None):
     """
     Return list of all active peers
     """
-    print("[SampleApp] Get-List in {} to {}".format(headers, body))
+    print("[SampleApp] Get-List")
 
-
-
+# Kết nối với 1 peer trong danh sách connected để chat đơn bằng /send-peer
 @app.route("/connect-peer", methods=["POST"])
 def connect_peer(headers=None, body=None):
     """
@@ -105,20 +96,15 @@ def connect_peer(headers=None, body=None):
     target = params.get("target", "")
     print(f"[SampleApp] Connecting to peer {target}")
 
-
+# Nhắn với tất cả connected peer
 @app.route("/broadcast-peer", methods=["POST"])
 def broadcast_peer(headers=None, body=None):
     """
     Broadcast message to all peers
     """
-    params = dict(pair.split("=", 1) for pair in body.split("&") if "=" in pair)
-    message = params.get("message", "")
-    print(f"[SampleApp] Broadcasting message: {message}")
-    print(f"   → Sent to {len(peer_list)} peers")
-    print(f"Broadcasted message to {len(peer_list)} peers.")
+    print(f"Broadcasted message to peers.")
 
-
-
+# Nhắn với peer nào đó
 @app.route("/send-peer", methods=["POST"])
 def send_peer(headers=None, body=None):
     """
@@ -129,15 +115,25 @@ def send_peer(headers=None, body=None):
     target = params.get("target", "")
     message = params.get("message", "")
     print(f"[SampleApp] Send to {target}: {message}")
-
+# đồng bộ để hiển thị lên frontend
 @app.route("/get-messages", methods=["POST"])
 def get_messages(headers=None, body=None):
     # trả lịch sử giữa current peer và target
     pass
-
+# Lấy danh sách những peer đã kết nối với peer hiện tại
+@app.route("/get-total-peer", methods=["GET"])
+def get_list(headers=None, body=None):
+    """
+    Return list of all active peers
+    """
+    print("[SampleApp] Get-total-List")
 @app.route("/get-connected", methods=["GET"])
 def get_connected(headers=None, body=None):
     # trả danh sách các peer đã connect
+    pass
+# cái này để cập nhật peer_list khi có peer rời
+@app.route('/remove-peer', methods=['POST'])
+def remove_peer(headers=None, body=None):
     pass
 
 if __name__ == "__main__":
