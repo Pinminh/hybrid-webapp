@@ -65,10 +65,6 @@ def hello(headers, body):
 
 @app.route("/submit-info", methods=["POST"])
 def submit_info(headers=None, body=None):
-    """
-    Peer submits info to central tracker
-    Expected format: ip=...&port=...
-    """
 
     print(f"[Submit] Received peer info: ")
 
@@ -133,6 +129,16 @@ def send_peer(headers=None, body=None):
     target = params.get("target", "")
     message = params.get("message", "")
     print(f"[SampleApp] Send to {target}: {message}")
+
+@app.route("/get-messages", methods=["POST"])
+def get_messages(headers=None, body=None):
+    # trả lịch sử giữa current peer và target
+    pass
+
+@app.route("/get-connected", methods=["GET"])
+def get_connected(headers=None, body=None):
+    # trả danh sách các peer đã connect
+    pass
 
 if __name__ == "__main__":
     # Parse command-line arguments to configure server IP and port
