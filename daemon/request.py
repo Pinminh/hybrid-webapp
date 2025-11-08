@@ -83,7 +83,7 @@ class Request():
         """Prepares the entire request with the given parameters."""
 
         # Prepare the request line from the request header
-        print(f"{request}")
+        #print(f"{request}")
         self.method, self.path, self.version = self.extract_request_line(request)
         print("[Request] {} path {} version {}".format(self.method, self.path, self.version))
 

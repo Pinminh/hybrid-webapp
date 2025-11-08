@@ -521,11 +521,11 @@ class Response():
             lines = []
             print(f"CHAT NE:{chat}")
             local_id = f"{src_ip}:{int(src_port)}"
-            
+            peer_id = f"{target_ip}:{int(target_port)}"
             for msg_dict in chat:
                 for sender, msg in msg_dict.items():
-                    if sender == local_id:
-                        lines.append(f"{local_id}|{msg}")
+                    if sender == local_id or sender == peer_id:
+                        lines.append(f"{sender}|{msg}")
             
             resp_body = "\n".join(lines).encode("utf-8")
             print(f"GỬI ĐẾN HTML :{lines}")
