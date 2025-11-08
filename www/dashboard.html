@@ -40,6 +40,8 @@ input,button{padding:5px; margin:2px;}
 
 <script>
 let peers=[], currentPeer=null, broadcast=false;
+let myIP = null;
+let myPort = null;
 
 // Helper POST form
 async function postForm(path, data){
@@ -56,8 +58,8 @@ document.getElementById('submit-peer').onclick = async ()=>{
   if(!ip||!port)return alert('Nhập IP và Port!');
   const r = await postForm('/submit-info',{ip,port});
   document.getElementById('status').innerText=r.text;
-  localStorage.setItem('myIP',ip);
-  localStorage.setItem('myPort',port);
+  myIP = ip
+  myPort = port
   loadPeers();
 };
 document.getElementById('refresh-peers').onclick = async()=>{
@@ -66,8 +68,6 @@ document.getElementById('refresh-peers').onclick = async()=>{
 // ===== Load Peer List =====
 async function loadPeers(){
   try{
-    const myIP = localStorage.getItem('myIP');
-const myPort = localStorage.getItem('myPort');
     const res = await fetch('/get-list');
     const text = await res.text();
     peers = text.split('\n').filter(Boolean).map(l=>{const [ip,port]=l.split(':'); return {ip,port};});
@@ -89,7 +89,6 @@ function renderPeerList(){
 
 // ===== Connect Peer =====
 async function connectPeer(ip,port){
-  const myIP = localStorage.getItem('myIP'), myPort=localStorage.getItem('myPort');
   if(!myIP||!myPort) return alert('Submit peer info first!');
   await postForm('/connect-peer',{source_ip:myIP,source_port:myPort,target_ip:ip,target_port:port});
   currentPeer={ip,port};
@@ -110,10 +109,9 @@ document.getElementById('broadcast-mode').onclick=()=>{
 // ===== Load Chat History =====
 async function loadHistory(ip,port){
   try{
-    const myIP = localStorage.getItem('myIP'), myPort=localStorage.getItem('myPort');
     if(!myIP || !myPort) return alert("Bạn chưa đăng ký IP/Port!");
     const res = await postForm('/get-messages',{src_ip:myIP,src_port:myPort,target_ip:ip,target_port:port}); 
-    const text = await res.text();
+    const text = await res.text;
     const lines=text.split('\n').filter(Boolean);
     const box=document.getElementById('chat-box');
     box.innerHTML='';
@@ -121,8 +119,8 @@ async function loadHistory(ip,port){
       // expected format: sender|msg
       const [sender,msg]=line.split('|');
       const div=document.createElement('div');
-      div.className=sender===localStorage.getItem('myIP')+':'+localStorage.getItem('myPort')?'msg-me':'msg-peer';
-      div.innerText=(sender===localStorage.getItem('myIP')+':'+localStorage.getItem('myPort')?'Me':'Peer_'+sender)+': '+msg;
+      div.className=sender===myIP+':'+myPort?'msg-me':'msg-peer';
+      div.innerText=(sender===myIP+':'+myPort?'Me':'Peer_'+sender)+': '+msg;
       box.appendChild(div);
     });
     box.scrollTop=box.scrollHeight;
@@ -133,7 +131,6 @@ async function loadHistory(ip,port){
 document.getElementById('send-msg').onclick=async ()=>{
   const msg=document.getElementById('msg-input').value.trim();
   if(!msg||!currentPeer) return;
-  const myIP = localStorage.getItem('myIP'), myPort=localStorage.getItem('myPort');
   await postForm('/send-peer',{source_ip:myIP,source_port:myPort,ip:currentPeer.ip,port:currentPeer.port,message:msg});
   appendMessage('me',msg);
   document.getElementById('msg-input').value='';
@@ -150,7 +147,6 @@ function appendMessage(from,msg){
 
 // ===== Initial =====
 setInterval(()=>{
-  const myIP = localStorage.getItem('myIP'), myPort=localStorage.getItem('myPort');
   if(currentPeer!=null && !broadcast ) loadHistory(currentPeer.ip,currentPeer.port);
 },5000);
 
