@@ -1,14 +1,3 @@
-#
-# Copyright (C) 2025 pdnguyen of HCMC University of Technology VNU-HCM.
-# All rights reserved.
-# This file is part of the CO3093/CO3094 course.
-#
-# WeApRous release
-#
-# The authors hereby grant to Licensee personal permission to use
-# and modify the Licensed Source Code for the sole purpose of studying
-# while attending the course
-#
 
 """
 daemon.response
@@ -20,43 +9,121 @@ based on incoming requests.
 
 The current version supports MIME type detection, content loading and header formatting
 """
-import datetime
 import os
+import json
+import socket
+import datetime
 import mimetypes
+import threading
+
 from .dictionary import CaseInsensitiveDict
+from urllib.parse import unquote_plus
+
+from db.session import session_manager
+from db import peer_list, history_chat,connections
+
+from .cookie import (
+    parse_session_cookie,
+    create_session_cookie,
+    create_logout_cookie,
+)
 
 BASE_DIR = ""
+peer_sockets = {}  # Lưu socket listener của từng peer
+# hàm để thêm các mối kết nối vô
+def add_connection(ip1, port1, ip2, port2):
+    a = f"{ip1}:{port1}"
+    b = f"{ip2}:{port2}"
+    connections.setdefault(a, set()).add(b)
+    connections.setdefault(b, set()).add(a)
+
+
+def handle_peer_message(conn, addr, my_ip, my_port):
+    try:
+        data = conn.recv(1024).decode()
+        if not data:
+            return
+        print(f"[Peer] Nhận từ {addr}: {data}")
+
+        if data.startswith("CONNECT_REQUEST"):
+            src = data.split(" ")[1]
+            print(f"🔗 Nhận CONNECT_REQUEST từ {src}, auto-accept luôn!")
+
+            # gửi CONFIRM_CONNECT ngược lại cho peer gửi yêu cầu
+            try:
+                ip, port = src.split(":")
+                with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as s:
+                    s.connect((ip, int(port)))
+                    s.sendall(b"CONFIRM_CONNECT")
+                    print(f"✅ Đã CONFIRM_CONNECT với {src}")
+            except Exception as e:
+                print(f"❌ Lỗi khi gửi CONFIRM_CONNECT: {e}")
+
+        elif data == "CONFIRM_CONNECT":
+            print(f"✅ Kết nối được xác nhận từ {addr}")
+        elif data.startswith("CHAT_MESSAGE"):
+            parts = data.split("|")
+            if len(parts) >= 4:
+                src_ip, src_port, msg = parts[1], (int)(parts[2]), parts[3]
+                print(f"💬 Tin nhắn mới từ {src_ip}:{src_port}: {msg}")
+                # key = tuple(sorted([(src_ip, int(src_port)), (my_ip, int(my_port))]))
+                # if key not in history_chat:
+                #     history_chat[key] = []
+                # sender_id = f"{src_ip}:{src_port}"
+                # history_chat[key].append({sender_id: msg})
+
+            else:
+                print(f"⚠️ CHAT_MESSAGE bị sai format: {data}")
+
+        else:
+            print(f"[Peer] Nội dung khác: {data}")
+
+    except Exception as e:
+        print(f"❌ Lỗi xử lý peer message: {e}")
+    finally:
+        conn.close()
+
+
+def send_to_peer(ip, port, message):
+    try:
+        with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as s:
+            s.connect((ip, int(port)))
+            s.sendall(message.encode())
+    except Exception as e:
+        print(f"[Error] Cannot send to peer {ip}:{port} - {e}")
+
+def start_peer_listener(my_ip, my_port):
+    with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as server_socket:
+        server_socket.bind((my_ip, int(my_port)))
+        server_socket.listen()
+        print(f"[Listener] Đang lắng nghe tại {my_ip}:{my_port}")
+
+        while True:
+            conn, addr = server_socket.accept()
+            threading.Thread(target=handle_peer_message, args=(conn, addr, my_ip, my_port)).start()
+
+def send_to_peer_message(src_ip, src_port, target_ip, target_port, msg):
+    try:
+        packet = f"CHAT_MESSAGE|{src_ip}|{src_port}|{msg}"
+        with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as s:
+            s.connect((target_ip, int(target_port)))
+            s.sendall(packet.encode("utf-8"))
+        # lưu lịch sử
+        key = tuple(sorted([(src_ip, int(src_port)), (target_ip, int(target_port))]))
+        if key not in history_chat:
+            history_chat[key] = []
+        sender_id = f"{src_ip}:{src_port}"
+        history_chat[key].append({sender_id: msg})
+        print(f"✅ Gửi tin nhắn tới {target_ip}:{target_port} → {msg}")
+    except Exception as e:
+        print(f"❌ Lỗi gửi tin tới {target_ip}:{target_port}: {e}")
+
+def make_chat_key(peer1, peer2):
+    """Tạo key dạng ipA:portA|ipB:portB, đảm bảo thứ tự cố định"""
+    peers = sorted([peer1, peer2])
+    return f"{peers[0]}|{peers[1]}"
 
 class Response():   
-    """The :class:`Response <Response>` object, which contains a
-    server's response to an HTTP request.
-
-    Instances are generated from a :class:`Request <Request>` object, and
-    should not be instantiated manually; doing so may produce undesirable
-    effects.
-
-    :class:`Response <Response>` object encapsulates headers, content, 
-    status code, cookies, and metadata related to the request-response cycle.
-    It is used to construct and serve HTTP responses in a custom web server.
-
-    :attrs status_code (int): HTTP status code (e.g., 200, 404).
-    :attrs headers (dict): dictionary of response headers.
-    :attrs url (str): url of the response.
-    :attrsencoding (str): encoding used for decoding response content.
-    :attrs history (list): list of previous Response objects (for redirects).
-    :attrs reason (str): textual reason for the status code (e.g., "OK", "Not Found").
-    :attrs cookies (CaseInsensitiveDict): response cookies.
-    :attrs elapsed (datetime.timedelta): time taken to complete the request.
-    :attrs request (PreparedRequest): the original request object.
-
-    Usage::
-
-      >>> import Response
-      >>> resp = Response()
-      >>> resp.build_response(req)
-      >>> resp
-      <Response>
-    """
 
     __attrs__ = [
         "_content",
@@ -120,14 +187,7 @@ class Response():
 
 
     def get_mime_type(self, path):
-        """
-        Determines the MIME type of a file based on its path.
-
-        "params path (str): Path to the file.
-
-        :rtype str: MIME type string (e.g., 'text/html', 'image/png').
-        """
-
+        
         try:
             mime_type, _ = mimetypes.guess_type(path)
         except Exception:
@@ -136,51 +196,36 @@ class Response():
 
 
     def prepare_content_type(self, mime_type='text/html'):
-        """
-        Prepares the Content-Type header and determines the base directory
-        for serving the file based on its MIME type.
-
-        :params mime_type (str): MIME type of the requested resource.
-
-        :rtype str: Base directory path for locating the resource.
-
-        :raises ValueError: If the MIME type is unsupported.
-        """
-        
         base_dir = ""
-
-        # Processing mime_type based on main_type and sub_type
         main_type, sub_type = mime_type.split('/', 1)
-        print("[Response] processing MIME main_type={} sub_type={}".format(main_type,sub_type))
+        self.headers['Content-Type'] = mime_type
+        #print("[Response] processing MIME main_type={} sub_type={}".format(main_type,sub_type))
         if main_type == 'text':
-            self.headers['Content-Type']='text/{}'.format(sub_type)
             if sub_type == 'plain' or sub_type == 'css':
                 base_dir = BASE_DIR+"static/"
             elif sub_type == 'html':
                 base_dir = BASE_DIR+"www/"
             else:
-                handle_text_other(sub_type)
+                raise ValueError("Invalid MEME type: main_type={} sub_type={}".format(main_type,sub_type))
         elif main_type == 'image':
-            base_dir = BASE_DIR+"static/"
-            self.headers['Content-Type']='image/{}'.format(sub_type)
+            if sub_type in ['png', 'jpeg', 'vnd.microsoft.icon', 'x-icon']:
+                base_dir = BASE_DIR+"static/images/"
+            else:
+                raise ValueError(f"Unsupported image subtype: {sub_type}")
         elif main_type == 'application':
-            base_dir = BASE_DIR+"apps/"
-            self.headers['Content-Type']='application/{}'.format(sub_type)
-        #
-        #  TODO: process other mime_type
-        #        application/xml       
-        #        application/zip
-        #        ...
-        #        text/csv
-        #        text/xml
-        #        ...
-        #        video/mp4 
-        #        video/mpeg
-        #        ...
-        #
-        else:
-            raise ValueError("Invalid MEME type: main_type={} sub_type={}".format(main_type,sub_type))
-
+            if sub_type == 'x-x509-ca-cert':
+                base_dir = BASE_DIR+"cert/"
+            elif sub_type == 'javascript':
+                base_dir = BASE_DIR+"static/js/"
+            elif sub_type == 'python':
+                base_dir = BASE_DIR+"apps/"
+            else:
+                raise ValueError(f"Unsupported application subtype: {sub_type}")
+        elif main_type == 'video':
+            if sub_type == 'mp4':
+                base_dir = BASE_DIR + ""
+            raise ValueError(f"Unsupported video subtype: {sub_type}")
+        else: raise ValueError(f"Unsupported main MIME type: {main_type}")
         return base_dir
 
 
@@ -197,11 +242,20 @@ class Response():
         filepath = os.path.join(base_dir, path.lstrip('/'))
 
         print("[Response] serving the object at location {}".format(filepath))
-            #
-            #  TODO: implement the step of fetch the object file
-            #        store in the return value of content
-            #
-        return len(content), content
+        # hiện thực lấy dữ liệu trả về (len(content) và content)
+        try:
+            with open(filepath, 'r', encoding='utf-8') as f:
+                content = f.read().encode('utf-8')
+            return (len(content), content)
+        except FileNotFoundError:
+            print("[Response] File not found: {}".format(filepath))
+            self.status_code = 404
+            return (len(b"404"),b"404")
+        except Exception as e:
+            print("[Response] Server error {}: {}".format(filepath, e))
+            self.status_code = 500
+            return (len(b"500"),b"500")
+
 
 
     def build_response_header(self, request):
@@ -216,7 +270,7 @@ class Response():
         reqhdr = request.headers
         rsphdr = self.headers
 
-        #Build dynamic headers
+        # Build dynamic headers
         headers = {
                 "Accept": "{}".format(reqhdr.get("Accept", "application/json")),
                 "Accept-Language": "{}".format(reqhdr.get("Accept-Language", "en-US,en;q=0.9")),
@@ -224,28 +278,31 @@ class Response():
                 "Cache-Control": "no-cache",
                 "Content-Type": "{}".format(self.headers['Content-Type']),
                 "Content-Length": "{}".format(len(self._content)),
-#                "Cookie": "{}".format(reqhdr.get("Cookie", "sessionid=xyz789")), #dummy cooki
+                # "Cookie": "{}".format(reqhdr.get("Cookie", "sessionid=xyz789")), #dummy cooki
         #
         # TODO prepare the request authentication
         #
-	# self.auth = ...
+        # self.auth = ...
                 "Date": "{}".format(datetime.datetime.utcnow().strftime("%a, %d %b %Y %H:%M:%S GMT")),
                 "Max-Forward": "10",
                 "Pragma": "no-cache",
                 "Proxy-Authorization": "Basic dXNlcjpwYXNz",  # example base64
                 "Warning": "199 Miscellaneous warning",
                 "User-Agent": "{}".format(reqhdr.get("User-Agent", "Chrome/123.0.0.0")),
-            }
+        }
 
         # Header text alignment
-            #
-            #  TODO: implement the header building to create formated
-            #        header from the provied headers
-            #
+        #
+        #  TODO: implement the header building to create formatted
+        #        header from the provided headers
+        #  DONE
+        lines = ['{}: {}'.format(k, v) for k, v in headers.items()]
+        fmt_header = '\r\n'.join(lines)
+        
         #
         # TODO prepare the request authentication
         #
-	# self.auth = ...
+        # self.auth = ...
         return str(fmt_header).encode('utf-8')
 
 
@@ -276,19 +333,357 @@ class Response():
 
         :rtype bytes: complete HTTP response using prepared headers and content.
         """
-
         path = request.path
+        if not path:
+            return self.build_notfound()
+        method = request.method
 
+        # ========== TASK 1A: Handle POST /login ==========
+        if path == "/login" and method == "POST":
+            # Parse form data from request body
+            params = request.body or {}            
+            username = params.get("username", "")
+            password = params.get("password", "")
+            
+            # Validate credentials
+            if username == "admin" and password == "password":
+                # CREATE SESSION
+                session = session_manager.create_session(username)
+                print("[Response] '{}' login SUCCESSFUL - Session ID: {}".format(username, session.session_id))
+                
+                base_dir = self.prepare_content_type("text/html")
+                _, content = self.build_content("/dashboard.html", base_dir)
+                
+                # Create session cookie
+                session_cookie = create_session_cookie(session.session_id, max_age=120)
+                
+                response = (
+                    "HTTP/1.1 200 OK\r\n"
+                    "Content-Type: text/html; charset=utf-8\r\n"
+                    f"Set-Cookie: {session_cookie}\r\n"
+                    f"Content-Length: {len(content)}\r\n"
+                    "Connection: close\r\n"
+                    "\r\n"
+                ).encode("utf-8") + content
+                return response
+            else:
+                print("[Response] '{}' login FAILED - Invalid credentials".format(username))
+                base_dir = self.prepare_content_type("text/html")
+                _, content = self.build_content("/login.html", base_dir)
+                
+                response = (
+                    "HTTP/1.1 401 Unauthorized\r\n"
+                    "Content-Type: text/html; charset=utf-8\r\n"
+                    f"Content-Length: {len(content)}\r\n"
+                    "Connection: close\r\n"
+                    "\r\n"
+                ).encode("utf-8") + content
+                return response
+    
+        # ========== TASK 1B: Handle GET / or /index.html ==========
+        elif path in ["/", "/index.html"] and method == "GET":
+            cookie_header = request.headers.get('Cookie', '')
+            session_info = parse_session_cookie(cookie_header)
+            session_id = session_info.get('session_id')
+            
+            # Validate session
+            session = session_manager.get_session(session_id)
+            
+            if session:
+                print("[Response] Valid session {} for user '{}' - Serving dashboard".format(
+                    session_id, session.username))
+                base_dir = self.prepare_content_type("text/html")
+                _, content = self.build_content("/dashboard.html", base_dir)
+                
+                response = (
+                    "HTTP/1.1 200 OK\r\n"
+                    "Content-Type: text/html; charset=utf-8\r\n"
+                    f"Content-Length: {len(content)}\r\n"
+                    "Connection: close\r\n"
+                    "\r\n"
+                ).encode("utf-8") + content
+                return response
+            else:
+                print("[Response] No valid session - Returning login page")
+                base_dir = self.prepare_content_type("text/html")
+                _, content = self.build_content("/login.html", base_dir)
+                
+                response = (
+                    "HTTP/1.1 401 Unauthorized\r\n"
+                    "Content-Type: text/html; charset=utf-8\r\n"
+                    f"Content-Length: {len(content)}\r\n"
+                    "Connection: close\r\n"
+                    "\r\n"
+                ).encode("utf-8") + content
+                return response
+        
+        # Logout endpoint
+        elif path == "/logout" and method == "POST":
+            cookie_header = request.headers.get('Cookie', '')
+            session_info = parse_session_cookie(cookie_header)
+            session_id = session_info.get('session_id')
+            
+            if session_id:
+                session_manager.destroy_session(session_id)
+            
+            logout_cookie = create_logout_cookie()
+            base_dir = self.prepare_content_type("text/html")
+            _, content = self.build_content("/login.html", base_dir)
+            
+            response = (
+                "HTTP/1.1 200 OK\r\n"
+                "Content-Type: text/html; charset=utf-8\r\n"
+                "Set-Cookie: {}\r\n"
+                "Content-Length: {}\r\n"
+                "Connection: close\r\n"
+                "\r\n"
+            ).format(logout_cookie, len(content)).encode("utf-8") + content
+            return response
+
+        # ======= START TASK 2 ======= #
+        # ========== Handle POST /submit-info ==========
+        elif path == "/submit-info" and method == "POST":
+            params = request.body or {}
+            ip = params.get("ip", "127.0.0.1")
+            port = params.get("port", "9001")
+
+            print(f"[Submit] Peer info received: {ip}:{port}")
+            if (ip, port) not in peer_list:
+                peer_list.append((ip, port))
+                print(f"[SubmitInfo] New peer registered: {ip}:{port}")
+                # mở luồng nghe request từ peer khác
+                if f"{ip}:{port}" in connections:
+                    print(f"[SubmitInfo] Re-Login for peer {ip}:{port}")
+                else:
+                    t = threading.Thread(target=start_peer_listener, args=(ip, port), daemon=True)
+                    t.start()
+                    peer_sockets[(ip, port)] = t
+            else:
+                print(f"[SubmitInfo] Peer already registered: {ip}:{port}")
+            response_body = f"Received peer info: {ip}:{port}".encode("utf-8")
+
+            response = (
+                "HTTP/1.1 200 OK\r\n"
+                "Content-Type: text/plain; charset=utf-8\r\n"
+                f"Content-Length: {len(response_body)}\r\n"
+                "Connection: close\r\n"
+                "\r\n"
+            ).encode("utf-8") + response_body
+            return response
+        elif path == "/add-list" and method == "POST":
+            params = request.body or {}
+            src_ip = params.get("source_ip")
+            src_port = params.get("source_port")
+            target_ip = params.get("target_ip", "")
+            target_port = params.get("target_port","")
+            if not all([src_ip, src_port, target_ip, target_port]):
+                msg = "Missing ip or port field".encode("utf-8")
+                return (
+                    "HTTP/1.1 400 Bad Request\r\n"
+                    "Content-Type: text/plain\r\n"
+                    f"Content-Length: {len(msg)}\r\n"
+                    "Connection: close\r\n\r\n"
+                ).encode("utf-8") + msg
+            try:
+                add_connection(src_ip,src_port,target_ip,target_port)
+
+                msg = f"Đã thêm peer vào danh sách kết nối".encode("utf-8")
+                response = (
+                    "HTTP/1.1 200 OK\r\n"
+                    "Content-Type: text/plain\r\n"
+                    f"Content-Length: {len(msg)}\r\n"
+                    "Connection: close\r\n\r\n"
+                ).encode("utf-8") + msg
+                return response
+
+            except Exception as e:
+                err = f"Lỗi khi kết nối tới {target_ip}:{target_port} → {e}".encode("utf-8")
+                print(err)
+                return self.build_notfound()
+        elif path == "/get-total-peer" and method == "GET":
+            if not peer_list:
+                content = "No peers registered.".encode("utf-8")
+            else:
+                content = "\n".join([f"{ip}:{port}" for ip, port in peer_list]).encode("utf-8")
+            
+            response = (
+                "HTTP/1.1 200 OK\r\n"
+                "Content-Type: text/plain\r\n"
+                f"Content-Length: {len(content)}\r\n"
+                "Connection: close\r\n"
+                "\r\n"
+            ).encode("utf-8") + content
+
+            return response
+        elif path == "/get-list" and method == "POST":
+            params = request.body or {}
+            ip = params.get("ip")
+            port = params.get("port")
+            if not ip or not port:
+                msg = "Missing ip or port field".encode("utf-8")
+                return (
+                    "HTTP/1.1 400 Bad Request\r\n"
+                    "Content-Type: text/plain\r\n"
+                    f"Content-Length: {len(msg)}\r\n"
+                    "Connection: close\r\n\r\n"
+                ).encode("utf-8") + msg
+            
+            content = "\n".join([f"{connect_peer}" for connect_peer in connections.get(f"{ip}:{port}",set())]).encode("utf-8")
+            
+            response = (
+                "HTTP/1.1 200 OK\r\n"
+                "Content-Type: text/plain\r\n"
+                f"Content-Length: {len(content)}\r\n"
+                "Connection: close\r\n"
+                "\r\n"
+            ).encode("utf-8") + content
+            return response
+        ## kết nối đến peer / direct peer communicate
+        elif path == "/connect-peer" and method == "POST":
+            params = request.body or {}
+            src_ip = params.get("source_ip")
+            src_port = params.get("source_port")
+            target_ip = params.get("target_ip", "")
+            target_port = params.get("target_port","")
+
+            if not all([src_ip, src_port, target_ip, target_port]):
+                msg = "Missing ip or port field".encode("utf-8")
+                return (
+                    "HTTP/1.1 400 Bad Request\r\n"
+                    "Content-Type: text/plain\r\n"
+                    f"Content-Length: {len(msg)}\r\n"
+                    "Connection: close\r\n\r\n"
+                ).encode("utf-8") + msg
+
+            try:
+                # Gửi yêu cầu kết nối đến peer đích
+                s = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+                s.settimeout(3)
+                s.connect((target_ip, int(target_port)))
+                s.sendall(f"CONNECT_REQUEST {src_ip}:{src_port}".encode("utf-8"))
+                print(f"✅ Gửi CONNECT_REQUEST từ {src_ip}:{src_port} đến {target_ip}:{target_port}")
+                s.close()
+
+                msg = f"Kết nối P2P giữa {src_ip}:{src_port} ↔ {target_ip}:{target_port} đã được thiết lập.".encode("utf-8")
+                response = (
+                    "HTTP/1.1 200 OK\r\n"
+                    "Content-Type: text/plain\r\n"
+                    f"Content-Length: {len(msg)}\r\n"
+                    "Connection: close\r\n\r\n"
+                ).encode("utf-8") + msg
+                return response
+
+            except Exception as e:
+                err = f"Lỗi khi kết nối tới {target_ip}:{target_port} → {e}".encode("utf-8")
+                print(err)
+                return self.build_notfound()
+        elif path == "/broadcast-peer" and method == "POST":
+            params = request.body or {}
+            ip = params.get("ip")
+            port = params.get("port")
+            message = unquote_plus(params.get("message"))
+
+            if not all([ip,port, message]):
+                msg = "Missing required fields".encode("utf-8")
+                return (
+                    "HTTP/1.1 400 Bad Request\r\n"
+                    "Content-Type: text/plain\r\n"
+                    f"Content-Length: {len(msg)}\r\nConnection: close\r\n\r\n"
+                ).encode("utf-8") + msg
+            connected_set = connections.get(f"{ip}:{port}", set())
+            for target in connected_set:
+                target_ip, target_port = target.split(":")
+                send_to_peer_message(ip, port, target_ip, target_port, message)
+            body = f"Sent from {ip}:{port}".encode("utf-8")
+            return (
+                "HTTP/1.1 200 OK\r\nContent-Type: text/plain\r\n"
+                f"Content-Length: {len(body)}\r\nConnection: close\r\n\r\n"
+            ).encode("utf-8") + body
+        elif path == "/send-peer" and method == "POST":
+            params = request.body or {}
+            src_ip = params.get("source_ip")
+            src_port = params.get("source_port")
+            target_ip = params.get("ip")
+            target_port = params.get("port")
+            message = unquote_plus(params.get("message"))
+
+            if not all([src_ip, src_port, target_ip, target_port, message]):
+                msg = "Missing required fields".encode("utf-8")
+                return (
+                    "HTTP/1.1 400 Bad Request\r\n"
+                    "Content-Type: text/plain\r\n"
+                    f"Content-Length: {len(msg)}\r\nConnection: close\r\n\r\n"
+                ).encode("utf-8") + msg
+
+            send_to_peer_message(src_ip, src_port, target_ip, target_port, message)
+
+            body = f"Sent from {src_ip}:{src_port} to {target_ip}:{target_port}".encode("utf-8")
+            return (
+                "HTTP/1.1 200 OK\r\nContent-Type: text/plain\r\n"
+                f"Content-Length: {len(body)}\r\nConnection: close\r\n\r\n"
+            ).encode("utf-8") + body
+        elif path == "/get-messages" and method == "POST":
+            params = request.body or {}
+            src_ip = params.get("src_ip","")
+            src_port = params.get("src_port","")
+            target_ip = params.get("target_ip","")
+            target_port = params.get("target_port","")
+            if not all([src_ip, src_port, target_ip, target_port]):
+                msg = "Missing fields".encode("utf-8")
+                return (
+                    "HTTP/1.1 400 Bad Request\r\n"
+                    f"Content-Length: {len(msg)}\r\n"
+                    "Content-Type: text/plain\r\nConnection: close\r\n\r\n"
+                ).encode("utf-8") + msg
+
+            key = tuple(sorted([(src_ip, int(src_port)), (target_ip, int(target_port))]))
+            chat = history_chat.get(key, [])
+
+            lines = []
+            local_id = f"{src_ip}:{int(src_port)}"
+            peer_id = f"{target_ip}:{int(target_port)}"
+            for msg_dict in chat:
+                for sender, msg in msg_dict.items():
+                    if sender == local_id or sender == peer_id:
+                        lines.append(f"{sender}|{msg}")
+            
+            resp_body = "\n".join(lines).encode("utf-8")
+            response = (
+                "HTTP/1.1 200 OK\r\n"
+                "Content-Type: text/plain; charset=utf-8\r\n"
+                f"Content-Length: {len(resp_body)}\r\n"
+                "Connection: close\r\n\r\n"
+            ).encode("utf-8") + resp_body
+            return response
+        elif path== "/remove-peer":
+            params = request.body or {}
+            ip = params.get("ip","")
+            port = params.get("port","")
+            # để xóa peer_list
+            peer = (ip,port)
+            # ko cần xóa khỏi connections
+            if peer in peer_list:
+                peer_list.remove(peer)
+            resp_body = "1 peer đã thoát".encode("utf-8")
+            print("Cập nhật lại danh sách peer hoạt động")
+            response = (
+                "HTTP/1.1 200 OK\r\n"
+                "Content-Type: text/plain; charset=utf-8\r\n"
+                f"Content-Length: {len(resp_body)}\r\n"
+                "Connection: close\r\n\r\n"
+            ).encode("utf-8") + resp_body
+            return response
         mime_type = self.get_mime_type(path)
         print("[Response] {} path {} mime_type {}".format(request.method, request.path, mime_type))
 
+
         base_dir = ""
 
-        #If HTML, parse and serve embedded objects
+        # If HTML, parse and serve embedded objects
         if path.endswith('.html') or mime_type == 'text/html':
-            base_dir = self.prepare_content_type(mime_type = 'text/html')
+            base_dir = self.prepare_content_type(mime_type='text/html')
         elif mime_type == 'text/css':
-            base_dir = self.prepare_content_type(mime_type = 'text/css')
+            base_dir = self.prepare_content_type(mime_type='text/css')
         #
         # TODO: add support objects
         #

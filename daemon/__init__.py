@@ -18,3 +18,9 @@ from .request import Request
 from .backend import create_backend
 from .httpadapter import HttpAdapter
 from .dictionary import CaseInsensitiveDict
+
+from .cookie import (
+    parse_session_cookie, 
+    create_session_cookie, 
+    create_logout_cookie
+)

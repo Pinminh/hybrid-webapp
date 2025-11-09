@@ -1,0 +1,413 @@
+<!DOCTYPE html>
+<html lang="vi">
+<head>
+<meta charset="UTF-8">
+<title>P2P Chat Minimal</title>
+  <style>
+    /* ===== General ===== */
+    body {
+        font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+        background-color: #e6f0fa; /* xanh pastel nhạt */
+        margin: 20px;
+    }
+    
+    h2 {
+        font-size: 26px;
+        color: #2a6edb;
+        margin-bottom: 20px;
+    }
+    
+    h3 {
+        font-size: 18px;
+        color: #3a7bd5;
+        margin-bottom: 10px;
+    }
+    
+    div {
+        padding: 12px;
+        background-color: #ffffff; /* nền trắng cho khối */
+        border-radius: 10px;
+        box-shadow: 0 2px 6px rgba(0,0,0,0.05);
+        margin-bottom: 15px;
+    }
+    
+    /* ===== Inputs & Buttons ===== */
+    input, button {
+        padding: 6px 10px;
+        margin: 2px 0;
+        border-radius: 6px;
+        border: 1px solid #ccc;
+        font-size: 14px;
+    }
+    
+    button {
+        background-color: #2c7be5;
+        color: white;
+        border: none;
+        cursor: pointer;
+        transition: background-color 0.2s ease;
+    }
+    
+    button:hover {
+        background-color: #1a5fcc;
+    }
+    
+    /* ===== Peer / Total Peer Buttons ===== */
+    #total-peer-list button,
+    #peer-list button {
+        margin: 5px 0;
+        width: 100%;
+        text-align: left;
+        background-color: #a8d0fb; /* pastel nhạt */
+        color: #1a3c6e;
+        border: 1px solid #ccc;
+        border-radius: 6px;
+        padding: 6px 10px;
+        cursor: pointer;
+        transition: background-color 0.2s ease;
+    }
+    
+    #total-peer-list button:hover,
+    #peer-list button:hover {
+        background-color: #82b1f5;
+    }
+    
+    /* ===== Chat Box ===== */
+    #chat-section {
+        display: none;
+    }
+    
+        /* ===== Chat Box ===== */
+    #chat-box {
+        border: 1px solid #ccc;
+        border-radius: 10px;
+        padding: 10px;
+        height: 200px;
+        overflow-y: auto;
+        background-color: #f5faff;
+        display: flex;
+        flex-direction: column;
+    }
+
+    /* ===== Chat Bubble ===== */
+    .msg-me, .msg-peer {
+        max-width: 70%;
+        padding: 6px 10px;
+        margin: 3px 0;
+        border-radius: 12px;
+        word-wrap: break-word;
+    }
+
+    .msg-me {
+        align-self: flex-start;  /* bên trái */
+        background-color: #cfe4ff; /* xanh pastel */
+        color: #2c7be5;
+    }
+
+    .msg-peer {
+        align-self: flex-end;    /* bên phải */
+        background-color: #f9c8c8; /* đỏ pastel nhạt */
+        color: #e55353;
+    }
+
+    /* flex để input + button nằm cùng hàng */
+#chat-input-area {
+    display: flex;
+    margin-top: 8px;
+}
+
+/* ô nhập chiếm toàn bộ phần còn lại */
+#msg-input {
+    flex: 1;
+    padding: 8px 10px;
+    border: 1px solid #ccc;
+    border-radius: 6px;
+    font-size: 14px;
+}
+
+/* nút gửi cố định độ rộng */
+#send-msg {
+    margin-left: 6px;
+    width: 90px;
+    border-radius: 6px;
+    background-color: #2c7be5;
+    color: white;
+    border: none;
+    cursor: pointer;
+    transition: background-color 0.2s ease;
+}
+
+#send-msg:hover {
+    background-color: #1a5fcc;
+}
+    /* ===== Chat input & send button ===== */
+    #chat-section input {
+        width: calc(100% - 90px);
+        padding: 6px 10px;
+        border-radius: 6px;
+        border: 1px solid #ccc;
+        display: inline-block;
+    }
+    .msg-me, .msg-peer {
+    max-width: 85%;   /* gần nhau hơn */
+    padding: 6px 10px;
+    margin: 3px 0;
+    border-radius: 12px;
+    word-wrap: break-word;
+}
+    #chat-section {
+    max-width: 420px;
+    margin: 0 auto;
+}
+    #chat-section button {
+        width: 80px;
+        display: inline-block;
+        border-radius: 6px;
+        background-color: #2c7be5;
+        color: white;
+    }
+    </style>
+  
+</head>
+<body>
+
+<h2>🌐 P2P Dashboard</h2>
+
+<div>
+  <h3>Submit Peer Info</h3>
+  IP: <input id="ip" placeholder="127.0.0.1">
+  Port: <input id="port" placeholder="9001">
+  <button id="submit-peer">Submit</button>
+  <div id="status"></div>
+</div>
+
+<div>
+  <h3>Peer List (Active)</h3>
+  <button id="refresh-peers">Refresh List</button>
+  <button id="broadcast-mode">Broadcast Mode</button>
+  <div id="total-peer-list"></div>
+</div>
+
+<div>
+  <h3>My Connections</h3>
+  <button id="refresh-connections">Refresh Connections</button>
+  <div id="peer-list"></div>
+</div>
+
+<div id="chat-section" style="display:none;">
+  <h3>Chat with <span id="chat-with"></span></h3>
+  <div id="chat-box"></div>
+  <div id="chat-input-area">
+    <input id="msg-input" placeholder="Type a message">
+    <button id="send-msg">Send</button>
+  </div>
+</div>
+
+<script>
+let peers=[], currentPeer=null, broadcast=false;
+let myIP = null;
+let myPort = null;
+
+// Helper POST form
+async function postForm(path, data){
+  const params = new URLSearchParams();
+  for(const k in data) params.append(k,data[k]);
+  const res = await fetch(path,{method:'POST',headers:{'Content-Type':'application/x-www-form-urlencoded'},body:params.toString()});
+  return {ok:res.ok, text: await res.text()};
+}
+
+// ===== Submit Peer Info =====
+document.getElementById('submit-peer').onclick = async ()=>{
+  const ip=document.getElementById('ip').value.trim();
+  const port=document.getElementById('port').value.trim();
+  if(!ip||!port)return alert('Nhập IP và Port!');
+  const r = await postForm('/submit-info',{ip,port});
+   // Check status
+   if (!r.ok) {
+        document.getElementById('status').innerText = "❌ " + r.text;
+        return;
+    }
+  document.getElementById('status').innerText=r.text;
+  myIP = ip
+  myPort = port
+  loadTotalPeers();
+};
+document.getElementById('refresh-peers').onclick = async()=>{
+  loadTotalPeers();
+} 
+// ===== Load total Peer List =====
+async function loadTotalPeers(){
+  try{
+    const res = await fetch('/get-total-peer');
+    const text = await res.text();
+    total_peers = text.split('\n').filter(Boolean).map(l=>{const [ip,port]=l.split(':'); return {ip,port};});
+    renderTotalPeers(total_peers);
+  }catch(e){console.error(e);}
+}
+
+function renderTotalPeers(total_peers) {
+  const div = document.getElementById('total-peer-list');
+  div.innerHTML = '';
+  total_peers.forEach(p => {
+    const btn = document.createElement('button');
+    btn.innerText = `Add ${p.ip}:${p.port}`;
+    btn.onclick = () => addPeerIntoList(p.ip, p.port); // dùng lại connect-peer như cũ
+    div.appendChild(btn);
+    div.appendChild(document.createElement('br'));
+  });
+}
+
+async function addPeerIntoList(ip,port){
+  if(!myIP||!myPort) return alert('Submit peer info first!');
+  await postForm('/add-list',{source_ip:myIP,source_port:myPort,target_ip:ip,target_port:port});
+  loadPeers();
+}
+
+
+///////////////////////////
+// CONECTION
+// ===== Connect Peer =====
+document.getElementById('refresh-connections').onclick = async()=>{
+  loadPeers();
+} 
+// ===== Load total Peer List =====
+async function loadPeers(){
+  try{
+    const res = await postForm('/get-list',{ip:myIP,port:myPort});
+    const text = await res.text;
+    peers = text.split('\n').filter(Boolean).map(l=>{const [ip,port]=l.split(':'); return {ip,port};});
+    renderPeerList(peers);
+  }catch(e){console.error(e);}
+}
+function renderPeerList(peers){
+  const div = document.getElementById('peer-list');
+  div.innerHTML='';
+  peers.forEach(p=>{
+    const btn = document.createElement('button');
+    btn.innerText=`Connect ${p.ip}:${p.port}`;
+    btn.onclick=()=>connectPeer(p.ip,p.port);
+    div.appendChild(btn);
+    div.appendChild(document.createElement('br'));
+  });
+}
+async function connectPeer(ip,port){
+  if(!myIP||!myPort) return alert('Submit peer info first!');
+  await postForm('/connect-peer',{source_ip:myIP,source_port:myPort,target_ip:ip,target_port:port});
+  currentPeer={ip,port};
+  broadcast=false;
+  document.getElementById('chat-section').style.display='block';
+  document.getElementById('chat-with').innerText=`${ip}:${port}`;
+  document.getElementById('send-msg').innerText = "Gửi";
+  loadHistory(ip,port);
+}
+
+// ===== Broadcast Mode =====
+document.getElementById('broadcast-mode').onclick=()=>{
+  broadcast = true;
+  currentPeer = null;
+  document.getElementById('chat-section').style.display = 'block';
+  document.getElementById('chat-with').innerText = "📢 All Connected Peers";
+  document.getElementById('send-msg').innerText = "Gửi toàn bộ";
+  document.getElementById('chat-box').innerHTML = '';
+};
+
+// ===== Load Connected Peers =====
+async function loadConnected(ip, port){
+  if(!ip || !port) return;
+  try{
+    const res = await postForm('/get-list', { ip, port });
+    const text = res.text;
+    const connectedPeers = text.split('\n').filter(Boolean).map(l=>{
+      const [p_ip, p_port] = l.split(':');
+      return { ip: p_ip, port: p_port };
+    });
+    renderPeerList(connectedPeers);
+  }catch(e){
+    console.error(e);
+  }
+}
+// ===== Load Chat History =====
+async function loadHistory(ip,port){
+  if(broadcast) return; 
+  try{
+    if(!myIP || !myPort) return alert("Bạn chưa đăng ký IP/Port!");
+    const res = await postForm('/get-messages',{src_ip:myIP,src_port:myPort,target_ip:ip,target_port:port}); 
+    const text = await res.text;
+    const lines=text.split('\n').filter(Boolean);
+    const box=document.getElementById('chat-box');
+    box.innerHTML='';
+    lines.forEach(line=>{
+      // expected format: sender|msg
+      const [sender,msg]=line.split('|');
+      const div=document.createElement('div');
+      div.className=sender===myIP+':'+myPort?'msg-me':'msg-peer';
+      div.innerText=msg;
+      box.appendChild(div);
+    });
+    box.scrollTop=box.scrollHeight;
+  }catch(e){console.error(e);}
+}
+
+document.getElementById('send-msg').onclick = async ()=>{
+  const msg = document.getElementById('msg-input').value.trim();
+  if (!msg) return;
+
+  if (broadcast) {
+    await postForm('/broadcast-peer', { ip: myIP, port: myPort, message: msg });
+    appendMessage('me', msg + " (broadcast)");
+  } else if (currentPeer) {
+    await postForm('/send-peer', {
+      source_ip: myIP,
+      source_port: myPort,
+      ip: currentPeer.ip,
+      port: currentPeer.port,
+      message: msg
+    });
+    appendMessage('me', msg);
+  }
+
+  document.getElementById('msg-input').value = '';
+};
+
+// ===== Enable Enter key to send message =====
+document.getElementById('msg-input').addEventListener('keydown', (e) => {
+  if(e.key === 'Enter'){
+    e.preventDefault(); // ngăn dòng mới
+    document.getElementById('send-msg').click(); // click nút gửi
+  }
+});
+
+function appendMessage(from,msg){
+  // const box=document.getElementById('chat-box');
+  // const div=document.createElement('div');
+  // div.className=from==='me'?'msg-me':'msg-peer';
+  // div.innerText=(from==='me'?'Me':'Peer_'+currentPeer.ip+':'+currentPeer.port)+': '+msg;
+  // box.appendChild(div);
+  // box.scrollTop=box.scrollHeight;
+  const box=document.getElementById('chat-box');
+  const div=document.createElement('div');
+  div.className = from==='me' ? 'msg-me' : 'msg-peer';
+  div.innerText = msg;
+  box.appendChild(div);
+  box.scrollTop=box.scrollHeight;
+}
+
+// ===== Initial =====
+setInterval(()=>{
+  if(currentPeer!=null && !broadcast ) loadHistory(currentPeer.ip,currentPeer.port);
+},1000);
+
+loadTotalPeers();
+window.addEventListener("beforeunload", () => {
+    // Tạo dữ liệu dạng URL-encoded
+    const params = new URLSearchParams();
+    params.append("ip", myIP);
+    params.append("port", myPort);
+
+    // Gửi dữ liệu về server trước khi thoát
+    navigator.sendBeacon('/remove-peer', params);
+});
+
+</script>
+</body>
+</html>

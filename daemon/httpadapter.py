@@ -104,11 +104,11 @@ class HttpAdapter:
 
         # Handle the request
         msg = conn.recv(1024).decode()
-        req.prepare(msg, routes)
 
+        req.prepare(msg, routes)
         # Handle request hook
         if req.hook:
-            print("[HttpAdapter] hook in route-path METHOD {} PATH {}".format(req.hook._route_path,req.hook._route_methods))
+           # print("[HttpAdapter] hook in route-path METHOD {} PATH {}".format(req.hook._route_path,req.hook._route_methods))
             req.hook(headers = "bksysnet",body = "get in touch")
             #
             # TODO: handle for App hook here
@@ -116,8 +116,6 @@ class HttpAdapter:
 
         # Build response
         response = resp.build_response(req)
-
-        #print(response)
         conn.sendall(response)
         conn.close()
 
@@ -131,7 +129,7 @@ class HttpAdapter:
         :rtype: cookies - A dictionary of cookie key-value pairs.
         """
         cookies = {}
-        for header in headers:
+        for header in self.headers:
             if header.startswith("Cookie:"):
                 cookie_str = header.split(":", 1)[1].strip()
                 for pair in cookie_str.split(";"):
