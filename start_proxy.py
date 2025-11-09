@@ -61,43 +61,33 @@ def parse_virtual_hosts(config_file):
     # Match each host block
     host_blocks = re.findall(r'host\s+"([^"]+)"\s*\{(.*?)\}', config_text, re.DOTALL)
 
-    dist_policy_map = ""
-
     routes = {}
     for host, block in host_blocks:
-        proxy_map = {}
-
         # Find all proxy_pass entries
         proxy_passes = re.findall(r'proxy_pass\s+http://([^\s;]+);', block)
-        map = proxy_map.get(host,[])
-        map = map + proxy_passes
-        proxy_map[host] = map
-
+        
         # Find dist_policy if present
-        policy_match = re.search(r'dist_policy\s+(\w+)', block)
-        if policy_match:
-            dist_policy_map = policy_match.group(1)
-        else: #default policy is round_robin
-            dist_policy_map = 'round-robin'
+        policy_match = re.search(r'dist_policy\s+([\w-]+)', block)
+        dist_policy = policy_match.group(1) if policy_match else 'round-robin'
+        
+        # Build the routing configuration
+        if len(proxy_passes) == 0:
+            # No proxy_pass defined - skip or use default
+            print(f"[Config] Warning: No proxy_pass defined for host '{host}'")
+            routes[host] = (['127.0.0.1:9000'], 'round-robin')
             
-        #
-        # @bksysnet: Build the mapping and policy
-        # TODO: this policy varies among scenarios 
-        #       the default policy is provided with one proxy_pass
-        #       In the multi alternatives of proxy_pass then
-        #       the policy is applied to identify the highes matching
-        #       proxy_pass
-        #
-        if len(proxy_map.get(host,[])) == 1:
-            routes[host] = (proxy_map.get(host,[])[0], dist_policy_map)
-        # esle if:
-        #         TODO:  apply further policy matching here
-        #
+        elif len(proxy_passes) == 1:
+            # Single backend - no policy needed
+            routes[host] = (proxy_passes[0], dist_policy)
+            print(f"[Config] Host '{host}' - Single backend: {proxy_passes[0]}")
+            
         else:
-            routes[host] = (proxy_map.get(host,[]), dist_policy_map)
+            # Multiple backends - policy will be applied
+            routes[host] = (proxy_passes, dist_policy)
+            print(f"[Config] Host '{host}' - Multiple backends with '{dist_policy}' policy:")
+            for i, backend in enumerate(proxy_passes):
+                print(f"         [{i}] {backend}")
 
-    for key, value in routes.items():
-        print(key, value)
     return routes
 
 
