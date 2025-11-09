@@ -137,6 +137,27 @@
     transition: background-color 0.2s ease;
 }
 
+/* ===== Chat và Notification chia 2 nửa ===== */
+#chat-and-noti {
+  display: flex;
+  gap: 20px;
+  align-items: flex-start;
+  margin-top: 20px;
+}
+
+#chat-section, #notification-panel {
+  flex: 1;
+}
+
+#chat-section {
+  max-width: 50%;
+}
+
+#notification-panel {
+  max-width: 50%;
+}
+
+
 #send-msg:hover {
     background-color: #1a5fcc;
 }
@@ -166,6 +187,20 @@
         background-color: #2c7be5;
         color: white;
     }
+    #notification-list button {
+  margin-left: 8px;    /* cách chữ ra một chút */
+  border-radius: 6px;
+  background-color: #2c7be5;
+  color: white;
+  border: none;
+  cursor: pointer;
+  transition: background-color 0.2s ease;
+  padding: 4px 10px;
+}
+
+#notification-list button:hover {
+  background-color: #1a5fcc;
+}
     </style>
   
 </head>
@@ -194,6 +229,23 @@
   <div id="peer-list"></div>
 </div>
 
+<!-- <div>
+  <h3>Thông báo tin nhắn</h3>
+  <div id="notification-list" 
+       style="
+         background-color: #f9fbff;
+         border: 1px solid #d0e1ff;
+         border-radius: 10px;
+         padding: 8px 10px;
+         max-height: 120px;
+         overflow-y: auto;
+         color: #2c3e50;
+         font-size: 14px;
+       ">
+    <em>Chưa có thông báo mới.</em>
+  </div>
+</div>
+
 <div id="chat-section" style="display:none;">
   <h3>Chat with <span id="chat-with"></span></h3>
   <div id="chat-box"></div>
@@ -201,7 +253,37 @@
     <input id="msg-input" placeholder="Type a message">
     <button id="send-msg">Send</button>
   </div>
+</div> -->
+<!-- ===== Gộp Chat + Notification song song ===== -->
+<div id="chat-and-noti">
+  <!-- Bên trái: Chat -->
+  <div id="chat-section" style="display:none;">
+    <h3>Chat with <span id="chat-with"></span></h3>
+    <div id="chat-box"></div>
+    <div id="chat-input-area">
+      <input id="msg-input" placeholder="Type a message">
+      <button id="send-msg">Send</button>
+    </div>
+  </div>
+
+  <!-- Bên phải: Notification -->
+  <div id="notification-panel">
+    <h3>Thông báo tin nhắn</h3>
+    <div id="notification-list"
+         style="
+           background-color: #f9fbff;
+           border: 1px solid #d0e1ff;
+           border-radius: 10px;
+           padding: 8px 10px;
+           color: #2c3e50;
+           font-size: 14px;
+         ">
+      <em>Chưa có thông báo mới.</em>
+    </div>
+  </div>
 </div>
+
+
 
 <script>
 let peers=[], currentPeer=null, broadcast=false;
@@ -378,12 +460,6 @@ document.getElementById('msg-input').addEventListener('keydown', (e) => {
 });
 
 function appendMessage(from,msg){
-  // const box=document.getElementById('chat-box');
-  // const div=document.createElement('div');
-  // div.className=from==='me'?'msg-me':'msg-peer';
-  // div.innerText=(from==='me'?'Me':'Peer_'+currentPeer.ip+':'+currentPeer.port)+': '+msg;
-  // box.appendChild(div);
-  // box.scrollTop=box.scrollHeight;
   const box=document.getElementById('chat-box');
   const div=document.createElement('div');
   div.className = from==='me' ? 'msg-me' : 'msg-peer';
@@ -391,6 +467,61 @@ function appendMessage(from,msg){
   box.appendChild(div);
   box.scrollTop=box.scrollHeight;
 }
+
+let fetchedNotifications = []; // giữ thông báo hiện tại
+
+async function updateNotification() {
+  if (!myIP || !myPort) return;
+
+  try {
+    const res = await postForm('/update-notification', { ip: myIP, port: myPort });
+    const text = res.text.trim();
+    const listDiv = document.getElementById('notification-list');
+
+    const newLines = text.split('\n').filter(Boolean);
+
+    // Thêm vào danh sách hiện tại nếu chưa có
+    newLines.forEach(line => {
+      if (!fetchedNotifications.includes(line)) {
+        fetchedNotifications.push(line);
+      }
+    });
+
+    // render tất cả notifications hiện tại
+    listDiv.innerHTML = '';
+    if (fetchedNotifications.length === 0) {
+      listDiv.innerHTML = '<em>Chưa có thông báo mới.</em>';
+    } else {
+      fetchedNotifications.forEach(line => {
+        const [ip, port] = line.split(':');
+        const container = document.createElement('div');
+        const label = document.createElement('span');
+        label.innerText = `📩 Tin nhắn từ ${ip}:${port}`;
+
+        const btn = document.createElement('button');
+        btn.innerText = 'Xem';
+        btn.onclick = () => {
+          connectPeer(ip, port);
+          // remove khỏi danh sách hiện tại
+          fetchedNotifications = fetchedNotifications.filter(l => l !== line);
+          container.remove();
+          if (fetchedNotifications.length === 0) {
+            listDiv.innerHTML = '<em>Chưa có thông báo mới.</em>';
+          }
+        };
+        container.appendChild(label);
+        container.appendChild(btn);
+        listDiv.appendChild(container);
+      });
+    }
+
+  } catch (err) { console.error(err); }
+}
+
+
+// Gọi định kỳ mỗi 2 giây
+setInterval(updateNotification, 2000);
+
 
 // ===== Initial =====
 setInterval(()=>{
