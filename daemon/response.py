@@ -18,8 +18,16 @@ from .dictionary import CaseInsensitiveDict
 from db import peer_list, history_chat,connections
 from urllib.parse import unquote_plus
 #from db import *
-BASE_DIR = ""
 import threading
+from .session import (
+    session_manager, 
+    parse_session_cookie, 
+    create_session_cookie, 
+    create_logout_cookie
+)
+
+
+BASE_DIR = ""
 peer_sockets = {}  # Lưu socket listener của từng peer
 # hàm để thêm các mối kết nối vô
 def add_connection(ip1, port1, ip2, port2):
@@ -338,24 +346,27 @@ class Response():
             
             # Validate credentials
             if username == "admin" and password == "password":
-                # LOGIN SUCCESS
-                print(f"[Response] '{username}' login SUCCESSFUL - Setting cookie")
+                # CREATE SESSION
+                session = session_manager.create_session(username)
+                print("[Response] '{}' login SUCCESSFUL - Session ID: {}".format(username, session.session_id))
+                
                 base_dir = self.prepare_content_type("text/html")
-                # chuyển hướng
                 _, content = self.build_content("/dashboard.html", base_dir)
+                
+                # Create session cookie
+                session_cookie = create_session_cookie(session.session_id, max_age=120)
                 
                 response = (
                     "HTTP/1.1 200 OK\r\n"
                     "Content-Type: text/html; charset=utf-8\r\n"
-                    "Set-Cookie: auth=true; Path=/; HttpOnly\r\n"
+                    f"Set-Cookie: {session_cookie}\r\n"
                     f"Content-Length: {len(content)}\r\n"
                     "Connection: close\r\n"
                     "\r\n"
                 ).encode("utf-8") + content
                 return response
             else:
-                # LOGIN FAILED
-                print(f"[Response] '{username}' login FAILED - Invalid credentials")
+                print("[Response] '{}' login FAILED - Invalid credentials".format(username))
                 base_dir = self.prepare_content_type("text/html")
                 _, content = self.build_content("/login.html", base_dir)
                 
@@ -370,11 +381,16 @@ class Response():
     
         # ========== TASK 1B: Handle GET / or /index.html ==========
         elif path in ["/", "/index.html"] and method == "GET":
-            cookies = request.cookies or {}
+            cookie_header = request.headers.get('Cookie', '')
+            session_info = parse_session_cookie(cookie_header)
+            session_id = session_info.get('session_id')
             
-            if cookies.get("auth") == "true":
-                # Valid cookie found
-                print("[Response] Valid auth cookie - Serving dashboard.html")
+            # Validate session
+            session = session_manager.get_session(session_id)
+            
+            if session:
+                print("[Response] Valid session {} for user '{}' - Serving dashboard".format(
+                    session_id, session.username))
                 base_dir = self.prepare_content_type("text/html")
                 _, content = self.build_content("/dashboard.html", base_dir)
                 
@@ -387,8 +403,7 @@ class Response():
                 ).encode("utf-8") + content
                 return response
             else:
-                # No valid cookie
-                print("[Response] No auth cookie - Returning 401")
+                print("[Response] No valid session - Returning login page")
                 base_dir = self.prepare_content_type("text/html")
                 _, content = self.build_content("/login.html", base_dir)
                 
@@ -400,6 +415,30 @@ class Response():
                     "\r\n"
                 ).encode("utf-8") + content
                 return response
+        
+        # Logout endpoint
+        elif path == "/logout" and method == "POST":
+            cookie_header = request.headers.get('Cookie', '')
+            session_info = parse_session_cookie(cookie_header)
+            session_id = session_info.get('session_id')
+            
+            if session_id:
+                session_manager.destroy_session(session_id)
+            
+            logout_cookie = create_logout_cookie()
+            base_dir = self.prepare_content_type("text/html")
+            _, content = self.build_content("/login.html", base_dir)
+            
+            response = (
+                "HTTP/1.1 200 OK\r\n"
+                "Content-Type: text/html; charset=utf-8\r\n"
+                "Set-Cookie: {}\r\n"
+                "Content-Length: {}\r\n"
+                "Connection: close\r\n"
+                "\r\n"
+            ).format(logout_cookie, len(content)).encode("utf-8") + content
+            return response
+
         # ======= START TASK 2 ======= #
         # ========== Handle POST /submit-info ==========
         elif path == "/submit-info" and method == "POST":
