@@ -3,91 +3,6 @@
 <head>
 <meta charset="UTF-8">
 <title>P2P Chat Minimal</title>
-<!-- <style>
-body{font-family:sans-serif; margin:20px;}
-input,button{padding:5px; margin:2px;}
-#peer-list{margin-top:10px;}
-#chat-box{border:1px solid #ccc; padding:10px; height:200px; overflow:auto; margin-top:10px;}
-.msg-me{color:blue;}
-.msg-peer{color:green;}
-</style> -->
-<!-- <style>
-  body {
-      font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
-      background-color: #e6f0fa; /* xanh pastel nhạt */
-      margin: 20px;
-  }
-  
-  h2, h3 {
-      color: #2c7be5; /* xanh dương pastel */
-      margin-bottom: 10px;
-  }
-  
-  input, button {
-      padding: 6px 10px;
-      margin: 2px 0;
-      border-radius: 6px;
-      border: 1px solid #ccc;
-      font-size: 14px;
-  }
-  
-  button {
-      background-color: #2c7be5;
-      color: white;
-      border: none;
-      cursor: pointer;
-      transition: background-color 0.2s ease;
-  }
-  
-  button:hover {
-      background-color: #1a5fcc;
-  }
-  
-  #peer-list button {
-      margin-bottom: 5px;
-  }
-  
-  div > h3 {
-      margin-top: 20px;
-  }
-  
-  div {
-      padding: 10px;
-      background-color: #ffffff; /* nền trắng */
-      border-radius: 10px;
-      box-shadow: 0 2px 6px rgba(0,0,0,0.1);
-      margin-bottom: 15px;
-  }
-  
-  #chat-box {
-      border: 1px solid #ccc;
-      border-radius: 10px;
-      padding: 10px;
-      height: 200px;
-      overflow-y: auto;
-      background-color: #f5faff; /* xanh pastel nhẹ cho chat */
-  }
-  
-  .msg-me {
-      color: #2c7be5;
-      margin: 3px 0;
-  }
-  
-  .msg-peer {
-      color: #0a5caa;
-      margin: 3px 0;
-  }
-  
-  #chat-section input {
-      width: calc(100% - 80px);
-      display: inline-block;
-  }
-  
-  #chat-section button {
-      width: 70px;
-      display: inline-block;
-  }
-  </style> -->
   <style>
     /* ===== General ===== */
     body {
@@ -195,7 +110,36 @@ input,button{padding:5px; margin:2px;}
         color: #e55353;
     }
 
-    
+    /* flex để input + button nằm cùng hàng */
+#chat-input-area {
+    display: flex;
+    margin-top: 8px;
+}
+
+/* ô nhập chiếm toàn bộ phần còn lại */
+#msg-input {
+    flex: 1;
+    padding: 8px 10px;
+    border: 1px solid #ccc;
+    border-radius: 6px;
+    font-size: 14px;
+}
+
+/* nút gửi cố định độ rộng */
+#send-msg {
+    margin-left: 6px;
+    width: 90px;
+    border-radius: 6px;
+    background-color: #2c7be5;
+    color: white;
+    border: none;
+    cursor: pointer;
+    transition: background-color 0.2s ease;
+}
+
+#send-msg:hover {
+    background-color: #1a5fcc;
+}
     /* ===== Chat input & send button ===== */
     #chat-section input {
         width: calc(100% - 90px);
@@ -204,7 +148,17 @@ input,button{padding:5px; margin:2px;}
         border: 1px solid #ccc;
         display: inline-block;
     }
-    
+    .msg-me, .msg-peer {
+    max-width: 85%;   /* gần nhau hơn */
+    padding: 6px 10px;
+    margin: 3px 0;
+    border-radius: 12px;
+    word-wrap: break-word;
+}
+    #chat-section {
+    max-width: 420px;
+    margin: 0 auto;
+}
     #chat-section button {
         width: 80px;
         display: inline-block;
@@ -243,8 +197,10 @@ input,button{padding:5px; margin:2px;}
 <div id="chat-section" style="display:none;">
   <h3>Chat with <span id="chat-with"></span></h3>
   <div id="chat-box"></div>
-  <input id="msg-input" placeholder="Type a message">
-  <button id="send-msg">Send</button>
+  <div id="chat-input-area">
+    <input id="msg-input" placeholder="Type a message">
+    <button id="send-msg">Send</button>
+  </div>
 </div>
 
 <script>
