@@ -20,7 +20,7 @@ from .dictionary import CaseInsensitiveDict
 from urllib.parse import unquote_plus
 
 from db.session import session_manager
-from db import peer_list, history_chat,connections
+from db import peer_list, history_chat,connections, notifications
 
 from .cookie import (
     parse_session_cookie,
@@ -66,6 +66,15 @@ def handle_peer_message(conn, addr, my_ip, my_port):
             if len(parts) >= 4:
                 src_ip, src_port, msg = parts[1], (int)(parts[2]), parts[3]
                 print(f"💬 Tin nhắn mới từ {src_ip}:{src_port}: {msg}")
+                my_peer = (my_ip,my_port)
+                # nếu key chưa tồn tại, tạo list rỗng
+                if my_peer not in notifications:
+                    notifications[my_peer] = []
+                # chỉ append nếu chưa có src_ip,src_port trong danh sách để tránh trùng
+                if (src_ip, str(src_port)) not in notifications[my_peer]:
+                    notifications[my_peer].append((src_ip, str(src_port)))
+                # cập nhật thông báo
+                
                 # key = tuple(sorted([(src_ip, int(src_port)), (my_ip, int(my_port))]))
                 # if key not in history_chat:
                 #     history_chat[key] = []
@@ -672,6 +681,29 @@ class Response():
                 f"Content-Length: {len(resp_body)}\r\n"
                 "Connection: close\r\n\r\n"
             ).encode("utf-8") + resp_body
+            return response
+        elif path == "/update-notification" and method == "POST":
+            params = request.body or {}
+            ip = params.get("ip","")
+            port = params.get("port","")
+            key = (ip, port)
+            lines = []
+
+            # Kiểm tra có thông báo mới cho peer này không
+            if key in notifications:
+                sources = notifications[key]  # list các peer đã gửi tin nhắn
+                for src_ip, src_port in sources:
+                    lines.append(f"{src_ip}:{src_port}")
+                # Sau khi trả dữ liệu, xóa các notification đã gửi đi
+                notifications[key] = []
+
+            response_text = "\n".join(lines).encode("utf-8")
+            response = (
+                "HTTP/1.1 200 OK\r\n"
+                "Content-Type: text/plain; charset=utf-8\r\n"
+                f"Content-Length: {len(response_text)}\r\n"
+                "Connection: close\r\n\r\n"
+            ).encode("utf-8") + response_text
             return response
         mime_type = self.get_mime_type(path)
         print("[Response] {} path {} mime_type {}".format(request.method, request.path, mime_type))
