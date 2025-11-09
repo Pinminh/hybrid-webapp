@@ -48,6 +48,11 @@ def login(headers="guest", body="anonymous"):
     """
     print("[SampleApp] Logging in {} to {}".format(headers, body))
 
+
+@app.route('/logout', methods=['POST'])
+def logout(headers=None, body=None):
+    print("[SampleApp] Logging out {}".format(headers))
+
 @app.route('/hello', methods=['PUT'])
 def hello(headers, body):
     """
