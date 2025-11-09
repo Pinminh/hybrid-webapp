@@ -9,23 +9,24 @@ based on incoming requests.
 
 The current version supports MIME type detection, content loading and header formatting
 """
-import json
-import datetime
 import os
-import mimetypes
+import json
 import socket
-from .dictionary import CaseInsensitiveDict
-from db import peer_list, history_chat,connections
-from urllib.parse import unquote_plus
-#from db import *
+import datetime
+import mimetypes
 import threading
-from .session import (
-    session_manager, 
-    parse_session_cookie, 
-    create_session_cookie, 
-    create_logout_cookie
-)
 
+from .dictionary import CaseInsensitiveDict
+from urllib.parse import unquote_plus
+
+from db.session import session_manager
+from db import peer_list, history_chat,connections
+
+from .cookie import (
+    parse_session_cookie,
+    create_session_cookie,
+    create_logout_cookie,
+)
 
 BASE_DIR = ""
 peer_sockets = {}  # Lưu socket listener của từng peer
