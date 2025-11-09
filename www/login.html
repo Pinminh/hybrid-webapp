@@ -38,7 +38,11 @@
     margin-bottom: 25px;
     font-size: 28px;
   }
-
+  input[type="text"],
+input[type="password"],
+input[type="submit"] {
+  box-sizing: border-box;
+}
   input[type="text"],
   input[type="password"] {
     width: 100%;
@@ -84,9 +88,10 @@
   <div class="login-container">
     <h1>Login</h1>
     <form method="POST" action="/login">
-      <input name="username" type="text" placeholder="Username" required><br>
-      <input name="password" type="password" placeholder="Password" required><br>
+      <input name="username" type="text" placeholder="Username" required>
+      <input name="password" type="password" placeholder="Password" required>
       <input type="submit" value="Login">
+
     </form>
     <div class="footer">Chào bạn đã đến với WebApp của nhóm :333</div>
   </div>
