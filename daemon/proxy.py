@@ -90,15 +90,14 @@ def resolve_routing_policy(hostname, routes):
     :params port (int): port number of the request target server.
     :params routes (dict): dictionary mapping hostnames and location.
     """
-    print(routes)
-
-    print(hostname)
+    host_ip, host_port = hostname.split(':', 1)
+    if host_ip in ["0.0.0.0", "localhost"]:
+        host_ip = "127.0.0.1"
+    
+    hostname = f"{host_ip}:{host_port}"
+    
     proxy_map, policy = routes.get(hostname, ('127.0.0.1:9000', 'round-robin'))
-    print(proxy_map)
-    print(policy)
 
-    proxy_host = '127.0.0.1'
-    proxy_port = '9000'
     if isinstance(proxy_map, list):
         if len(proxy_map) == 0:
             print("[Proxy] Empty resolved routing of hostname {}".format(hostname))
@@ -119,8 +118,8 @@ def resolve_routing_policy(hostname, routes):
                 print("[Proxy] Unsupported policy {} for hostname {}, default to round-robin".format(policy, hostname))
                 proxy_host, proxy_port = apply_round_robin(hostname, proxy_map)
     else:
-        print("[Proxy] resolve route of hostname {} is singular string to {}:{}".format(hostname, proxy_host, proxy_port))
         proxy_host, proxy_port = proxy_map.split(":", 2)
+        print("[Proxy] resolve route of hostname {} is singular string to {}:{}".format(hostname, proxy_host, proxy_port))
 
     return proxy_host, proxy_port
 
